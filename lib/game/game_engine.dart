@@ -9,12 +9,31 @@ import 'entities.dart';
 class ArcadeGameEngine extends ChangeNotifier {
   static const String _highScoreKey = 'neon_striker_high_score_v1';
   static const String _muteKey = 'neon_striker_muted_v1';
+  static const String _coinsKey = 'neon_striker_coins_v1';
+  static const String _selectedShipKey = 'neon_striker_selected_ship_v1';
+  static const String _unlockedShipsKey = 'neon_striker_unlocked_ships_v1';
+  static const String _hullUpgradeKey = 'neon_striker_upg_hull_v1';
+  static const String _fireUpgradeKey = 'neon_striker_upg_fire_v1';
+  static const String _magnetUpgradeKey = 'neon_striker_upg_magnet_v1';
+
+  static const int maxUpgradeLevel = 5;
 
   final Random _rng = Random();
   final SoundService sound = SoundService();
 
   Size viewport = const Size(400, 800);
   GamePhase phase = GamePhase.title;
+
+  // Persistent meta-progression (Coins, Ships, Permanent Upgrades)
+  int coins = 0;
+  int runCoins = 0;
+  ShipType selectedShip = ShipType.viper;
+  ShipType previewShip = ShipType.viper;
+  final Set<ShipType> unlockedShips = {ShipType.viper};
+
+  int hullUpgradeLv = 0; // +1 Max HP per level
+  int fireUpgradeLv = 0; // +10% fire rate per level, +1 start WPN at lv 3+
+  int magnetUpgradeLv = 0; // +42px coin magnet radius, +1 start EMP at lv 2 & 4
 
   // Player state
   double playerX = 200;
@@ -58,6 +77,7 @@ class ArcadeGameEngine extends ChangeNotifier {
   final List<Enemy> enemies = [];
   final List<Particle> particles = [];
   final List<PowerUp> powerUps = [];
+  final List<CoinOrb> coinOrbs = [];
   final List<FloatingText> floatingTexts = [];
   final List<Shockwave> shockwaves = [];
 
@@ -67,6 +87,18 @@ class ArcadeGameEngine extends ChangeNotifier {
 
   bool get isMuted => sound.isMuted;
   bool get isOverdrive => overdriveTimer > 0;
+
+  ShipSpec get activeShipSpec => kShipSpecs[selectedShip]!;
+  ShipSpec get displayedShipSpec =>
+      kShipSpecs[phase == GamePhase.hangar ? previewShip : selectedShip]!;
+
+  bool isShipUnlocked(ShipType type) => unlockedShips.contains(type);
+
+  int get hullUpgradeCost => 120 * (hullUpgradeLv + 1);
+  int get fireUpgradeCost => 150 * (fireUpgradeLv + 1);
+  int get magnetUpgradeCost => 100 * (magnetUpgradeLv + 1);
+
+  double get coinMagnetRadius => 95.0 + magnetUpgradeLv * 42.0;
 
   Enemy? get activeBoss {
     for (final e in enemies) {
@@ -80,14 +112,53 @@ class ArcadeGameEngine extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       highScore = prefs.getInt(_highScoreKey) ?? 0;
       sound.isMuted = prefs.getBool(_muteKey) ?? false;
+      coins = prefs.getInt(_coinsKey) ?? 0;
+      hullUpgradeLv =
+          (prefs.getInt(_hullUpgradeKey) ?? 0).clamp(0, maxUpgradeLevel);
+      fireUpgradeLv =
+          (prefs.getInt(_fireUpgradeKey) ?? 0).clamp(0, maxUpgradeLevel);
+      magnetUpgradeLv =
+          (prefs.getInt(_magnetUpgradeKey) ?? 0).clamp(0, maxUpgradeLevel);
+
+      final savedUnlocked = prefs.getStringList(_unlockedShipsKey);
+      unlockedShips
+        ..clear()
+        ..add(ShipType.viper);
+      if (savedUnlocked != null) {
+        for (final name in savedUnlocked) {
+          for (final t in ShipType.values) {
+            if (t.name == name) unlockedShips.add(t);
+          }
+        }
+      }
+
+      final savedSelected = prefs.getString(_selectedShipKey);
+      if (savedSelected != null) {
+        for (final t in ShipType.values) {
+          if (t.name == savedSelected && unlockedShips.contains(t)) {
+            selectedShip = t;
+            previewShip = t;
+          }
+        }
+      }
+
       notifyListeners();
     } catch (_) {}
   }
 
-  Future<void> _saveHighScore() async {
+  Future<void> _saveProgress() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_highScoreKey, highScore);
+      await prefs.setInt(_coinsKey, coins);
+      await prefs.setString(_selectedShipKey, selectedShip.name);
+      await prefs.setStringList(
+        _unlockedShipsKey,
+        unlockedShips.map((e) => e.name).toList(),
+      );
+      await prefs.setInt(_hullUpgradeKey, hullUpgradeLv);
+      await prefs.setInt(_fireUpgradeKey, fireUpgradeLv);
+      await prefs.setInt(_magnetUpgradeKey, magnetUpgradeLv);
     } catch (_) {}
   }
 
@@ -100,6 +171,83 @@ class ArcadeGameEngine extends ChangeNotifier {
     } catch (_) {}
   }
 
+  void openHangar() {
+    previewShip = selectedShip;
+    phase = GamePhase.hangar;
+    bullets.clear();
+    enemies.clear();
+    powerUps.clear();
+    coinOrbs.clear();
+    floatingTexts.clear();
+    shockwaves.clear();
+    notifyListeners();
+  }
+
+  void selectPreviewShip(ShipType type) {
+    previewShip = type;
+    if (unlockedShips.contains(type)) {
+      selectedShip = type;
+      _saveProgress();
+    }
+    sound.playCoin();
+    notifyListeners();
+  }
+
+  bool unlockOrEquipPreviewShip() {
+    if (unlockedShips.contains(previewShip)) {
+      selectedShip = previewShip;
+      sound.playPowerUp();
+      _saveProgress();
+      notifyListeners();
+      return true;
+    }
+    final spec = kShipSpecs[previewShip]!;
+    if (coins < spec.unlockCost) return false;
+    coins -= spec.unlockCost;
+    unlockedShips.add(previewShip);
+    selectedShip = previewShip;
+    sound.playPowerUp();
+    _saveProgress();
+    notifyListeners();
+    return true;
+  }
+
+  bool buyHullUpgrade() {
+    if (hullUpgradeLv >= maxUpgradeLevel || coins < hullUpgradeCost) {
+      return false;
+    }
+    coins -= hullUpgradeCost;
+    hullUpgradeLv += 1;
+    sound.playPowerUp();
+    _saveProgress();
+    notifyListeners();
+    return true;
+  }
+
+  bool buyFireUpgrade() {
+    if (fireUpgradeLv >= maxUpgradeLevel || coins < fireUpgradeCost) {
+      return false;
+    }
+    coins -= fireUpgradeCost;
+    fireUpgradeLv += 1;
+    sound.playPowerUp();
+    _saveProgress();
+    notifyListeners();
+    return true;
+  }
+
+  bool buyMagnetUpgrade() {
+    if (magnetUpgradeLv >= maxUpgradeLevel || coins < magnetUpgradeCost) {
+      return false;
+    }
+    coins -= magnetUpgradeCost;
+    magnetUpgradeLv += 1;
+    sound.playPowerUp();
+    _saveProgress();
+    notifyListeners();
+    return true;
+  }
+
   void setViewport(Size size) {
     if (size.width <= 0 || size.height <= 0) return;
     final bool firstLayout = stars.isEmpty ||
@@ -108,9 +256,9 @@ class ArcadeGameEngine extends ChangeNotifier {
     viewport = size;
     if (firstLayout) {
       _initStars(size);
-      if (phase == GamePhase.title) {
+      if (phase == GamePhase.title || phase == GamePhase.hangar) {
         playerX = size.width * 0.5;
-        playerY = size.height * 0.74;
+        playerY = size.height * (phase == GamePhase.hangar ? 0.25 : 0.72);
         playerTargetX = playerX;
         playerTargetY = playerY;
       } else {
@@ -139,8 +287,10 @@ class ArcadeGameEngine extends ChangeNotifier {
   }
 
   void startGame() {
+    final spec = activeShipSpec;
     phase = GamePhase.playing;
     score = 0;
+    runCoins = 0;
     wave = 1;
     killsInWave = 0;
     killsForNextWave = 10;
@@ -148,10 +298,14 @@ class ArcadeGameEngine extends ChangeNotifier {
     comboTimer = 0.0;
     bossActive = false;
 
+    maxHp = spec.baseHp + hullUpgradeLv;
     hp = maxHp;
-    hasShield = true; // Start with 1 free shield so first run feels great
-    weaponLevel = 1;
-    empCharges = 2;
+    hasShield = true;
+    weaponLevel =
+        (spec.baseWeaponLevel + (fireUpgradeLv >= 3 ? 1 : 0)).clamp(1, 4);
+    final empBonusFromUpgrade =
+        (magnetUpgradeLv >= 2 ? 1 : 0) + (magnetUpgradeLv >= 4 ? 1 : 0);
+    empCharges = (2 + spec.bonusEmp + empBonusFromUpgrade).clamp(1, 5);
     invulnTimer = 1.0;
     overdriveTimer = 0.0;
     waveBannerTimer = 2.0;
@@ -166,6 +320,7 @@ class ArcadeGameEngine extends ChangeNotifier {
     enemies.clear();
     particles.clear();
     powerUps.clear();
+    coinOrbs.clear();
     floatingTexts.clear();
     shockwaves.clear();
 
@@ -190,16 +345,16 @@ class ArcadeGameEngine extends ChangeNotifier {
     bullets.clear();
     enemies.clear();
     powerUps.clear();
+    coinOrbs.clear();
     floatingTexts.clear();
     shockwaves.clear();
     playerX = viewport.width * 0.5;
-    playerY = viewport.height * 0.74;
+    playerY = viewport.height * 0.72;
     notifyListeners();
   }
 
   void setTouchPosition(Offset localPos) {
     if (phase != GamePhase.playing) return;
-    // Offset slightly upward so player's thumb doesn't hide the ship
     playerTargetX = localPos.dx.clamp(24.0, viewport.width - 24.0);
     playerTargetY = (localPos.dy - 58.0).clamp(80.0, viewport.height - 44.0);
   }
@@ -220,10 +375,8 @@ class ArcadeGameEngine extends ChangeNotifier {
       ),
     );
 
-    // Clear all enemy bullets
     bullets.removeWhere((b) => !b.isPlayer);
 
-    // Heavy damage to all enemies on screen
     for (int i = enemies.length - 1; i >= 0; i--) {
       final e = enemies[i];
       final dmg = e.type == EnemyType.boss ? 28 : 999;
@@ -252,7 +405,6 @@ class ArcadeGameEngine extends ChangeNotifier {
     final clampedDt = dt.clamp(0.0, 0.05);
     elapsedTime += clampedDt;
 
-    // Always animate background stars & grid (even on title screen)
     final bgSpeedMult = phase == GamePhase.playing
         ? (isOverdrive ? 1.85 : 1.0)
         : 0.65;
@@ -267,10 +419,19 @@ class ArcadeGameEngine extends ChangeNotifier {
     }
 
     if (phase == GamePhase.title) {
-      // Gentle idle hover animation on title screen
       playerX = viewport.width * 0.5 + sin(elapsedTime * 1.4) * 48.0;
       playerY = viewport.height * 0.72 + cos(elapsedTime * 2.1) * 14.0;
       playerTilt = cos(elapsedTime * 1.4) * 0.22;
+      _emitThrusterParticles(clampedDt);
+      _updateParticles(clampedDt);
+      notifyListeners();
+      return;
+    }
+
+    if (phase == GamePhase.hangar) {
+      playerX = viewport.width * 0.5;
+      playerY = viewport.height * 0.24 + sin(elapsedTime * 2.6) * 8.0;
+      playerTilt = sin(elapsedTime * 1.5) * 0.14;
       _emitThrusterParticles(clampedDt);
       _updateParticles(clampedDt);
       notifyListeners();
@@ -281,7 +442,6 @@ class ArcadeGameEngine extends ChangeNotifier {
       return;
     }
 
-    // Timers
     if (invulnTimer > 0) invulnTimer = max(0.0, invulnTimer - clampedDt);
     if (overdriveTimer > 0) overdriveTimer = max(0.0, overdriveTimer - clampedDt);
     if (waveBannerTimer > 0) waveBannerTimer = max(0.0, waveBannerTimer - clampedDt);
@@ -291,25 +451,25 @@ class ArcadeGameEngine extends ChangeNotifier {
       if (comboTimer == 0) combo = 0;
     }
 
-    // Smooth player movement toward touch target
+    final spec = activeShipSpec;
     final dx = playerTargetX - playerX;
     final dy = playerTargetY - playerY;
-    final follow = (18.0 * clampedDt).clamp(0.0, 1.0);
+    final follow = (spec.moveFollowSpeed * clampedDt).clamp(0.0, 1.0);
     playerX += dx * follow;
     playerY += dy * follow;
     playerTilt = (dx * 0.015).clamp(-0.38, 0.38);
 
     _emitThrusterParticles(clampedDt);
 
-    // Auto-fire player weapons
     _fireCooldown -= clampedDt;
     if (_fireCooldown <= 0) {
       _firePlayerWeapon();
       final baseRate = (0.19 - (weaponLevel - 1) * 0.015).clamp(0.11, 0.22);
-      _fireCooldown = isOverdrive ? baseRate * 0.58 : baseRate;
+      final upgradeFireMult = 1.0 + fireUpgradeLv * 0.10;
+      final totalRateMult = spec.fireRateMult * upgradeFireMult * (isOverdrive ? 1.7 : 1.0);
+      _fireCooldown = (baseRate / totalRateMult).clamp(0.065, 0.26);
     }
 
-    // Spawn enemies or Boss
     if (!bossActive) {
       _spawnTimer -= clampedDt;
       if (_spawnTimer <= 0) {
@@ -322,6 +482,7 @@ class ArcadeGameEngine extends ChangeNotifier {
     _updateBullets(clampedDt);
     _updateEnemies(clampedDt);
     _updatePowerUps(clampedDt);
+    _updateCoinOrbs(clampedDt);
     _updateParticles(clampedDt);
     _updateFloatingTexts(clampedDt);
     _updateShockwaves(clampedDt);
@@ -333,13 +494,15 @@ class ArcadeGameEngine extends ChangeNotifier {
     _thrusterTimer -= dt;
     if (_thrusterTimer <= 0) {
       _thrusterTimer = 0.025;
+      final spec = displayedShipSpec;
       final flameColor = isOverdrive
           ? const Color(0xFFFFD740)
-          : const Color(0xFFFF4081);
+          : spec.secondaryColor;
+      final yOffset = phase == GamePhase.hangar ? 28.0 : 18.0;
       particles.add(
         Particle(
-          x: playerX + (_rng.nextDouble() - 0.5) * 8,
-          y: playerY + 18,
+          x: playerX + (_rng.nextDouble() - 0.5) * 10,
+          y: playerY + yOffset,
           vx: (_rng.nextDouble() - 0.5) * 26,
           vy: 140 + _rng.nextDouble() * 80,
           life: 0.22,
@@ -354,7 +517,7 @@ class ArcadeGameEngine extends ChangeNotifier {
     sound.playLaser();
     final Color boltColor = isOverdrive
         ? const Color(0xFFFFD740)
-        : const Color(0xFF00F0FF);
+        : activeShipSpec.primaryColor;
     final int dmg = isOverdrive ? 2 : 1;
 
     void addBolt(double ox, double oy, double vx, double vy) {
@@ -396,7 +559,6 @@ class ArcadeGameEngine extends ChangeNotifier {
     final x = margin + _rng.nextDouble() * max(40.0, viewport.width - margin * 2);
 
     if (roll < 0.52) {
-      // Fast Scout
       enemies.add(
         Enemy(
           type: EnemyType.scout,
@@ -412,7 +574,6 @@ class ArcadeGameEngine extends ChangeNotifier {
         ),
       );
     } else if (roll < 0.82) {
-      // Striker that shoots
       enemies.add(
         Enemy(
           type: EnemyType.striker,
@@ -428,7 +589,6 @@ class ArcadeGameEngine extends ChangeNotifier {
         ),
       );
     } else {
-      // Heavy Cruiser
       enemies.add(
         Enemy(
           type: EnemyType.cruiser,
@@ -511,7 +671,6 @@ class ArcadeGameEngine extends ChangeNotifier {
         }
         if (hit) bullets.removeAt(i);
       } else {
-        // Enemy bullet hitting player
         final dx = b.x - playerX;
         final dy = b.y - playerY;
         final minDist = b.radius + playerRadius * 0.8;
@@ -564,7 +723,6 @@ class ArcadeGameEngine extends ChangeNotifier {
           e.fireTimer = max(1.3, 2.4 - wave * 0.05);
         }
       } else if (e.type == EnemyType.boss) {
-        // Boss enters top arena then strafes horizontally
         if (e.y < 125) {
           e.y += e.vy * dt;
         } else {
@@ -579,7 +737,6 @@ class ArcadeGameEngine extends ChangeNotifier {
 
           e.fireTimer -= dt;
           if (e.fireTimer <= 0) {
-            // 5-way fan spread from boss turrets
             for (int k = -2; k <= 2; k++) {
               final angle = k * 0.22 + sin(e.age * 1.5) * 0.12;
               bullets.add(
@@ -607,7 +764,6 @@ class ArcadeGameEngine extends ChangeNotifier {
         continue;
       }
 
-      // Collision with player
       final dx = e.x - playerX;
       final dy = e.y - playerY;
       final minDist = e.radius + playerRadius * 0.85;
@@ -650,7 +806,6 @@ class ArcadeGameEngine extends ChangeNotifier {
     score += gained;
     if (score > highScore) {
       highScore = score;
-      _saveHighScore();
     }
 
     sound.playExplosion(heavy: isBoss || e.type == EnemyType.cruiser);
@@ -661,6 +816,23 @@ class ArcadeGameEngine extends ChangeNotifier {
       count: isBoss ? 48 : (e.type == EnemyType.cruiser ? 26 : 16),
       speed: isBoss ? 280 : 190,
     );
+
+    // Spawn collectible gold coin orbs
+    final int coinCount = isBoss
+        ? 10
+        : (e.type == EnemyType.cruiser ? 3 : (e.type == EnemyType.striker ? 2 : 1));
+    final int coinVal = isBoss ? 15 : (e.type == EnemyType.cruiser ? 8 : 5);
+    for (int c = 0; c < coinCount; c++) {
+      coinOrbs.add(
+        CoinOrb(
+          x: e.x + (_rng.nextDouble() - 0.5) * 28,
+          y: e.y + (_rng.nextDouble() - 0.5) * 20,
+          vx: (_rng.nextDouble() - 0.5) * 85,
+          vy: 75 + _rng.nextDouble() * 65,
+          value: (coinVal * activeShipSpec.coinMult).round(),
+        ),
+      );
+    }
 
     if (isBoss) {
       bossActive = false;
@@ -704,6 +876,7 @@ class ArcadeGameEngine extends ChangeNotifier {
     killsInWave = 0;
     killsForNextWave = 10 + wave * 3;
     waveBannerTimer = 2.0;
+    _saveProgress();
 
     if (wave % 4 == 0) {
       _spawnBoss();
@@ -740,6 +913,45 @@ class ArcadeGameEngine extends ChangeNotifier {
       if (dx * dx + dy * dy <= minDist * minDist) {
         powerUps.removeAt(i);
         _applyPowerUp(p);
+      }
+    }
+  }
+
+  void _updateCoinOrbs(double dt) {
+    final magR = coinMagnetRadius;
+    final magR2 = magR * magR;
+
+    for (int i = coinOrbs.length - 1; i >= 0; i--) {
+      final c = coinOrbs[i];
+      c.age += dt;
+
+      final dx = playerX - c.x;
+      final dy = playerY - c.y;
+      final d2 = dx * dx + dy * dy;
+
+      if (d2 <= magR2) {
+        final dist = max(1.0, sqrt(d2));
+        final pull = 440.0 + magnetUpgradeLv * 55.0;
+        c.vx = (dx / dist) * pull;
+        c.vy = (dy / dist) * pull;
+      } else {
+        c.vx *= 0.96;
+        c.vy = min(145.0, c.vy + 40.0 * dt);
+      }
+
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+
+      if (d2 <= (playerRadius + 14) * (playerRadius + 14)) {
+        coinOrbs.removeAt(i);
+        coins += c.value;
+        runCoins += c.value;
+        sound.playCoin();
+        continue;
+      }
+
+      if (c.y > viewport.height + 30) {
+        coinOrbs.removeAt(i);
       }
     }
   }
@@ -825,7 +1037,7 @@ class ArcadeGameEngine extends ChangeNotifier {
     invulnTimer = 1.6;
     sound.playHit();
     _addShake(0.35, 10.0);
-    _spawnExplosion(playerX, playerY, const Color(0xFF00E5FF), count: 22);
+    _spawnExplosion(playerX, playerY, activeShipSpec.primaryColor, count: 22);
 
     if (weaponLevel > 1) {
       weaponLevel -= 1;
@@ -837,8 +1049,8 @@ class ArcadeGameEngine extends ChangeNotifier {
       _spawnExplosion(playerX, playerY, const Color(0xFFFF4081), count: 45, speed: 260);
       if (score > highScore) {
         highScore = score;
-        _saveHighScore();
       }
+      _saveProgress();
     }
   }
 

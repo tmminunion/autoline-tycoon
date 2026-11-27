@@ -14,7 +14,6 @@ class ArcadeGamePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
 
-    // Camera screen shake
     if (engine.shakeTimer > 0) {
       final mag = engine.shakeIntensity * (engine.shakeTimer / 0.45).clamp(0.0, 1.0);
       final dx = sin(engine.elapsedTime * 95) * mag;
@@ -24,6 +23,7 @@ class ArcadeGamePainter extends CustomPainter {
 
     _drawBackground(canvas, size);
     _drawShockwaves(canvas);
+    _drawCoinOrbs(canvas);
     _drawPowerUps(canvas);
     _drawBullets(canvas);
     _drawEnemies(canvas);
@@ -40,7 +40,6 @@ class ArcadeGamePainter extends CustomPainter {
   }
 
   void _drawBackground(Canvas canvas, Size size) {
-    // Deep space cyberpunk gradient
     final bgPaint = Paint()
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
@@ -53,7 +52,6 @@ class ArcadeGamePainter extends CustomPainter {
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
 
-    // Subtle moving synthwave cyber grid
     final gridPaint = Paint()
       ..color = const Color(0xFF00E5FF).withAlpha(22)
       ..strokeWidth = 1.0;
@@ -66,13 +64,11 @@ class ArcadeGamePainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // Parallax starfield
     final starPaint = Paint();
     for (final s in engine.stars) {
       final alpha = (s.brightness * 235).toInt().clamp(30, 255);
       starPaint.color = Color.fromARGB(alpha, 190, 240, 255);
       if (engine.isOverdrive) {
-        // Warp speed lines during overdrive
         starPaint.strokeWidth = s.size * 0.8;
         canvas.drawLine(
           Offset(s.x, s.y),
@@ -86,86 +82,180 @@ class ArcadeGamePainter extends CustomPainter {
   }
 
   void _drawPlayer(Canvas canvas) {
-    // Blink while invulnerable
-    if (engine.invulnTimer > 0 && ((engine.elapsedTime * 16).floor() % 2 == 0)) {
+    if (engine.phase == GamePhase.playing &&
+        engine.invulnTimer > 0 &&
+        ((engine.elapsedTime * 16).floor() % 2 == 0)) {
       return;
     }
+
+    final spec = engine.displayedShipSpec;
+    final bool isHangar = engine.phase == GamePhase.hangar;
+    final double scale = isHangar ? 1.65 : 1.0;
 
     canvas.save();
     canvas.translate(engine.playerX, engine.playerY);
     canvas.rotate(engine.playerTilt);
+    canvas.scale(scale, scale);
 
     final accent = engine.isOverdrive
         ? const Color(0xFFFFD740)
-        : const Color(0xFF00E5FF);
+        : spec.primaryColor;
+    final trim = spec.secondaryColor;
+
+    // Hangar holographic platform ring
+    if (isHangar) {
+      final ringPulse = 0.75 + sin(engine.elapsedTime * 4) * 0.25;
+      canvas.drawCircle(
+        Offset.zero,
+        36,
+        Paint()
+          ..color = accent.withAlpha((85 * ringPulse).toInt())
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6,
+      );
+      canvas.drawCircle(
+        Offset.zero,
+        44,
+        Paint()
+          ..color = trim.withAlpha((45 * ringPulse).toInt())
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
+    }
 
     // Glow aura under ship
-    final glowPaint = Paint()
-      ..color = accent.withAlpha(75)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
-    canvas.drawCircle(Offset.zero, 24, glowPaint);
-
-    // Thruster flame cone
-    final flicker = 0.85 + sin(engine.elapsedTime * 42) * 0.25;
-    final flamePath = Path()
-      ..moveTo(-7, 15)
-      ..lineTo(0, 28 + 10 * flicker)
-      ..lineTo(7, 15)
-      ..close();
-    canvas.drawPath(
-      flamePath,
-      Paint()..color = const Color(0xFFFF4081).withAlpha(220),
-    );
-    final coreFlame = Path()
-      ..moveTo(-3.5, 15)
-      ..lineTo(0, 22 + 6 * flicker)
-      ..lineTo(3.5, 15)
-      ..close();
-    canvas.drawPath(coreFlame, Paint()..color = const Color(0xFFFFD740));
-
-    // Swept fighter wings
-    final shipPath = Path()
-      ..moveTo(0, -25)
-      ..lineTo(8, -6)
-      ..lineTo(25, 12)
-      ..lineTo(20, 18)
-      ..lineTo(8, 12)
-      ..lineTo(5, 17)
-      ..lineTo(-5, 17)
-      ..lineTo(-8, 12)
-      ..lineTo(-20, 18)
-      ..lineTo(-25, 12)
-      ..lineTo(-8, -6)
-      ..close();
-
-    canvas.drawPath(shipPath, Paint()..color = const Color(0xFF14244B));
-    canvas.drawPath(
-      shipPath,
+    canvas.drawCircle(
+      Offset.zero,
+      24,
       Paint()
-        ..color = accent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2,
+        ..color = accent.withAlpha(80)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
     );
 
-    // Cockpit canopy
-    final cockpit = Path()
-      ..moveTo(0, -13)
-      ..lineTo(4.2, 0)
-      ..lineTo(0, 7)
-      ..lineTo(-4.2, 0)
-      ..close();
-    canvas.drawPath(cockpit, Paint()..color = accent);
+    final flicker = 0.85 + sin(engine.elapsedTime * 42) * 0.25;
 
-    // Wingtip magenta accents
-    final trimPaint = Paint()
-      ..color = const Color(0xFFFF4081)
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(const Offset(11, 2), const Offset(21, 13), trimPaint);
-    canvas.drawLine(const Offset(-11, 2), const Offset(-21, 13), trimPaint);
+    if (spec.type == ShipType.viper) {
+      _drawThruster(canvas, 0, 15, 7, 13 + 10 * flicker, trim);
+      final shipPath = Path()
+        ..moveTo(0, -25)
+        ..lineTo(8, -6)
+        ..lineTo(25, 12)
+        ..lineTo(20, 18)
+        ..lineTo(8, 12)
+        ..lineTo(5, 17)
+        ..lineTo(-5, 17)
+        ..lineTo(-8, 12)
+        ..lineTo(-20, 18)
+        ..lineTo(-25, 12)
+        ..lineTo(-8, -6)
+        ..close();
 
-    // Energy shield dome
-    if (engine.hasShield) {
+      canvas.drawPath(shipPath, Paint()..color = const Color(0xFF14244B));
+      canvas.drawPath(
+        shipPath,
+        Paint()
+          ..color = accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2,
+      );
+
+      final cockpit = Path()
+        ..moveTo(0, -13)
+        ..lineTo(4.2, 0)
+        ..lineTo(0, 7)
+        ..lineTo(-4.2, 0)
+        ..close();
+      canvas.drawPath(cockpit, Paint()..color = accent);
+
+      final trimPaint = Paint()
+        ..color = trim
+        ..strokeWidth = 2.0
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(const Offset(11, 2), const Offset(21, 13), trimPaint);
+      canvas.drawLine(const Offset(-11, 2), const Offset(-21, 13), trimPaint);
+    } else if (spec.type == ShipType.phantom) {
+      // Sleek forward-swept stealth delta
+      _drawThruster(canvas, 0, 14, 6, 16 + 11 * flicker, trim);
+      final shipPath = Path()
+        ..moveTo(0, -28)
+        ..lineTo(7, -8)
+        ..lineTo(22, -12)
+        ..lineTo(26, 8)
+        ..lineTo(10, 14)
+        ..lineTo(4, 18)
+        ..lineTo(-4, 18)
+        ..lineTo(-10, 14)
+        ..lineTo(-26, 8)
+        ..lineTo(-22, -12)
+        ..lineTo(-7, -8)
+        ..close();
+
+      canvas.drawPath(shipPath, Paint()..color = const Color(0xFF280D2B));
+      canvas.drawPath(
+        shipPath,
+        Paint()
+          ..color = accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2,
+      );
+
+      final canopy = Path()
+        ..moveTo(0, -18)
+        ..lineTo(3.5, -2)
+        ..lineTo(0, 6)
+        ..lineTo(-3.5, -2)
+        ..close();
+      canvas.drawPath(canopy, Paint()..color = Colors.white);
+
+      final wingSlash = Paint()
+        ..color = trim
+        ..strokeWidth = 2.0;
+      canvas.drawLine(const Offset(10, -5), const Offset(21, 4), wingSlash);
+      canvas.drawLine(const Offset(-10, -5), const Offset(-21, 4), wingSlash);
+    } else {
+      // Titan-MK4: Heavy twin-nose armored gunship with dual thrusters
+      _drawThruster(canvas, -9, 16, 5.5, 13 + 8 * flicker, trim);
+      _drawThruster(canvas, 9, 16, 5.5, 13 + 8 * flicker, trim);
+
+      final shipPath = Path()
+        ..moveTo(-8, -24)
+        ..lineTo(-3, -14)
+        ..lineTo(3, -14)
+        ..lineTo(8, -24)
+        ..lineTo(13, -8)
+        ..lineTo(27, 4)
+        ..lineTo(25, 17)
+        ..lineTo(14, 15)
+        ..lineTo(12, 19)
+        ..lineTo(-12, 19)
+        ..lineTo(-14, 15)
+        ..lineTo(-25, 17)
+        ..lineTo(-27, 4)
+        ..lineTo(-13, -8)
+        ..close();
+
+      canvas.drawPath(shipPath, Paint()..color = const Color(0xFF2B210B));
+      canvas.drawPath(
+        shipPath,
+        Paint()
+          ..color = accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5,
+      );
+
+      // Armored bridge core
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          const Rect.fromLTWH(-6, -9, 12, 16),
+          const Radius.circular(4),
+        ),
+        Paint()..color = trim.withAlpha(210),
+      );
+      canvas.drawCircle(const Offset(0, -1), 3.2, Paint()..color = Colors.white);
+    }
+
+    // Energy shield dome (only in gameplay)
+    if (engine.phase == GamePhase.playing && engine.hasShield) {
       final pulse = 0.75 + sin(engine.elapsedTime * 6) * 0.25;
       canvas.drawCircle(
         Offset.zero,
@@ -186,6 +276,56 @@ class ArcadeGamePainter extends CustomPainter {
     canvas.restore();
   }
 
+  void _drawThruster(
+    Canvas canvas,
+    double cx,
+    double topY,
+    double halfW,
+    double len,
+    Color outerColor,
+  ) {
+    final flamePath = Path()
+      ..moveTo(cx - halfW, topY)
+      ..lineTo(cx, topY + len)
+      ..lineTo(cx + halfW, topY)
+      ..close();
+    canvas.drawPath(flamePath, Paint()..color = outerColor.withAlpha(220));
+
+    final coreFlame = Path()
+      ..moveTo(cx - halfW * 0.5, topY)
+      ..lineTo(cx, topY + len * 0.65)
+      ..lineTo(cx + halfW * 0.5, topY)
+      ..close();
+    canvas.drawPath(coreFlame, Paint()..color = const Color(0xFFFFD740));
+  }
+
+  void _drawCoinOrbs(Canvas canvas) {
+    for (final c in engine.coinOrbs) {
+      final spin = 0.55 + (sin(c.age * 10).abs()) * 0.45;
+      canvas.drawCircle(
+        Offset(c.x, c.y),
+        10,
+        Paint()
+          ..color = const Color(0xFFFFD740).withAlpha(75)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+      canvas.save();
+      canvas.translate(c.x, c.y);
+      canvas.scale(spin, 1.0);
+      canvas.drawCircle(Offset.zero, 6.5, Paint()..color = const Color(0xFFFFB300));
+      canvas.drawCircle(
+        Offset.zero,
+        6.5,
+        Paint()
+          ..color = const Color(0xFFFFF59D)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6,
+      );
+      canvas.drawCircle(Offset.zero, 2.2, Paint()..color = Colors.white);
+      canvas.restore();
+    }
+  }
+
   void _drawEnemies(Canvas canvas) {
     for (final e in engine.enemies) {
       canvas.save();
@@ -193,7 +333,6 @@ class ArcadeGamePainter extends CustomPainter {
 
       final color = e.hitFlash > 0 ? Colors.white : e.color;
 
-      // Glow behind enemy
       canvas.drawCircle(
         Offset.zero,
         e.radius * 0.95,
@@ -203,7 +342,6 @@ class ArcadeGamePainter extends CustomPainter {
       );
 
       if (e.type == EnemyType.scout) {
-        // Sharp downward dart
         final p = Path()
           ..moveTo(0, e.radius)
           ..lineTo(e.radius * 0.9, -e.radius * 0.75)
@@ -220,7 +358,6 @@ class ArcadeGamePainter extends CustomPainter {
         );
         canvas.drawCircle(const Offset(0, -1), 3.5, Paint()..color = color);
       } else if (e.type == EnemyType.striker) {
-        // Diamond interceptor
         final p = Path()
           ..moveTo(0, e.radius)
           ..lineTo(e.radius, -2)
@@ -239,7 +376,6 @@ class ArcadeGamePainter extends CustomPainter {
         );
         canvas.drawCircle(Offset.zero, 5.5, Paint()..color = color);
       } else if (e.type == EnemyType.cruiser) {
-        // Heavy violet hexagon
         final p = Path();
         for (int i = 0; i < 6; i++) {
           final a = (pi / 3) * i + pi / 6;
@@ -270,7 +406,6 @@ class ArcadeGamePainter extends CustomPainter {
         );
         canvas.drawCircle(Offset.zero, 4, Paint()..color = Colors.white);
       } else if (e.type == EnemyType.boss) {
-        // Dreadnought Mothership
         final p = Path()
           ..moveTo(0, e.radius * 0.85)
           ..lineTo(e.radius * 0.55, e.radius * 0.45)
@@ -293,12 +428,10 @@ class ArcadeGamePainter extends CustomPainter {
             ..strokeWidth = 3.2,
         );
 
-        // Pulsing reactor core
         final pulse = 10.0 + sin(engine.elapsedTime * 9) * 3.0;
         canvas.drawCircle(Offset.zero, pulse, Paint()..color = color);
         canvas.drawCircle(Offset.zero, 5, Paint()..color = Colors.white);
 
-        // Twin side turrets
         for (final tx in [-28.0, 28.0]) {
           canvas.drawCircle(
             Offset(tx, 14),
@@ -308,7 +441,6 @@ class ArcadeGamePainter extends CustomPainter {
         }
       }
 
-      // Mini HP bar for damaged multi-HP enemies (non-boss)
       if (e.type != EnemyType.boss && e.hp < e.maxHp) {
         final w = e.radius * 1.6;
         final ratio = (e.hp / e.maxHp).clamp(0.0, 1.0);
@@ -329,7 +461,6 @@ class ArcadeGamePainter extends CustomPainter {
   void _drawBullets(Canvas canvas) {
     for (final b in engine.bullets) {
       if (b.isPlayer) {
-        // Glowing neon laser bolt
         final glow = Paint()
           ..color = b.color.withAlpha(120)
           ..strokeWidth = 7.0
@@ -343,7 +474,6 @@ class ArcadeGamePainter extends CustomPainter {
           ..strokeCap = StrokeCap.round;
         canvas.drawLine(Offset(b.x, b.y - 7), Offset(b.x, b.y + 7), core);
       } else {
-        // Glowing enemy plasma orb
         canvas.drawCircle(
           Offset(b.x, b.y),
           b.radius * 1.7,

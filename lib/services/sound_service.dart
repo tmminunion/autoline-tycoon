@@ -9,6 +9,7 @@ class SoundService {
   AudioPlayer? _explPlayer;
 
   int _lastLaserMs = 0;
+  int _lastCoinMs = 0;
 
   AudioPlayer _getLaserPlayer() {
     _laserPlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.stop);
@@ -36,6 +37,22 @@ class SoundService {
       await p.play(
         AssetSource('sfx/laser.wav'),
         volume: 0.35,
+        mode: PlayerMode.lowLatency,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> playCoin() async {
+    if (isMuted) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastCoinMs < 70) return;
+    _lastCoinMs = now;
+    try {
+      final p = _getFxPlayer();
+      await p.stop();
+      await p.play(
+        AssetSource('sfx/coin.wav'),
+        volume: 0.55,
         mode: PlayerMode.lowLatency,
       );
     } catch (_) {}

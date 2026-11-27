@@ -1,10 +1,87 @@
 import 'package:flutter/material.dart';
 
-enum GamePhase { title, playing, paused, gameOver }
+enum GamePhase { title, hangar, playing, paused, gameOver }
+
+enum ShipType { viper, phantom, titan }
 
 enum EnemyType { scout, striker, cruiser, boss }
 
 enum PowerUpType { spread, shield, overdrive, emp }
+
+class ShipSpec {
+  final ShipType type;
+  final String name;
+  final String role;
+  final Color primaryColor;
+  final Color secondaryColor;
+  final int baseHp;
+  final double fireRateMult; // higher = faster fire
+  final double moveFollowSpeed; // responsiveness
+  final int baseWeaponLevel;
+  final int bonusEmp;
+  final double coinMult;
+  final int unlockCost;
+
+  const ShipSpec({
+    required this.type,
+    required this.name,
+    required this.role,
+    required this.primaryColor,
+    required this.secondaryColor,
+    required this.baseHp,
+    required this.fireRateMult,
+    required this.moveFollowSpeed,
+    required this.baseWeaponLevel,
+    required this.bonusEmp,
+    required this.coinMult,
+    required this.unlockCost,
+  });
+}
+
+const Map<ShipType, ShipSpec> kShipSpecs = {
+  ShipType.viper: ShipSpec(
+    type: ShipType.viper,
+    name: 'VIPER-X',
+    role: 'BALANCED INTERCEPTOR',
+    primaryColor: Color(0xFF00E5FF),
+    secondaryColor: Color(0xFFFF4081),
+    baseHp: 3,
+    fireRateMult: 1.0,
+    moveFollowSpeed: 18.0,
+    baseWeaponLevel: 1,
+    bonusEmp: 0,
+    coinMult: 1.0,
+    unlockCost: 0,
+  ),
+  ShipType.phantom: ShipSpec(
+    type: ShipType.phantom,
+    name: 'PHANTOM-9',
+    role: 'RAPID STEALTH STRIKER',
+    primaryColor: Color(0xFFFF4081),
+    secondaryColor: Color(0xFFD500F9),
+    baseHp: 2,
+    fireRateMult: 1.32,
+    moveFollowSpeed: 24.0,
+    baseWeaponLevel: 1,
+    bonusEmp: 0,
+    coinMult: 1.35,
+    unlockCost: 350,
+  ),
+  ShipType.titan: ShipSpec(
+    type: ShipType.titan,
+    name: 'TITAN-MK4',
+    role: 'HEAVY ARMORED GUNSHIP',
+    primaryColor: Color(0xFFFFB300),
+    secondaryColor: Color(0xFF00E676),
+    baseHp: 5,
+    fireRateMult: 0.92,
+    moveFollowSpeed: 14.5,
+    baseWeaponLevel: 2,
+    bonusEmp: 1,
+    coinMult: 1.15,
+    unlockCost: 750,
+  ),
+};
 
 class Star {
   double x;
@@ -140,6 +217,24 @@ class PowerUp {
         return 'E';
     }
   }
+}
+
+class CoinOrb {
+  double x;
+  double y;
+  double vx;
+  double vy;
+  int value;
+  double age;
+
+  CoinOrb({
+    required this.x,
+    required this.y,
+    this.vx = 0.0,
+    this.vy = 105.0,
+    this.value = 5,
+    this.age = 0.0,
+  });
 }
 
 class FloatingText {

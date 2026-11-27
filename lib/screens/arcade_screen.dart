@@ -90,7 +90,10 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                         _buildBossBar(_engine.activeBoss!),
                       if (_engine.phase == GamePhase.playing) _buildEmpButton(),
                       if (_engine.phase == GamePhase.title) _buildTitleOverlay(),
-                      if (_engine.phase == GamePhase.paused) _buildPauseOverlay(),
+                      if (_engine.phase == GamePhase.hangar)
+                        _buildHangarOverlay(),
+                      if (_engine.phase == GamePhase.paused)
+                        _buildPauseOverlay(),
                       if (_engine.phase == GamePhase.gameOver)
                         _buildGameOverOverlay(),
                     ],
@@ -100,6 +103,37 @@ class _ArcadeScreenState extends State<ArcadeScreen>
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildCoinChip(int amount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF090D1A).withAlpha(170),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFD740).withAlpha(140)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.monetization_on_rounded,
+            color: Color(0xFFFFD740),
+            size: 16,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            '$amount',
+            style: const TextStyle(
+              color: Color(0xFFFFD740),
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -116,7 +150,6 @@ class _ArcadeScreenState extends State<ArcadeScreen>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Score + Combo
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -143,12 +176,27 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                           letterSpacing: 1.2,
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.monetization_on_rounded,
+                        color: Color(0xFFFFD740),
+                        size: 13,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${_engine.coins}',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD740),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                       if (_engine.combo >= 3) ...[
                         const SizedBox(width: 8),
                         Text(
-                          '${_engine.combo}x COMBO',
+                          '${_engine.combo}x',
                           style: const TextStyle(
-                            color: Color(0xFFFFD740),
+                            color: Color(0xFFFF4081),
                             fontSize: 11,
                             fontWeight: FontWeight.w900,
                           ),
@@ -157,15 +205,14 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                     ],
                   ),
                   const SizedBox(height: 6),
-                  // Hull HP + Shield indicators
                   Row(
                     children: [
                       for (int i = 0; i < _engine.maxHp; i++)
                         Padding(
-                          padding: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.only(right: 3),
                           child: Icon(
                             Icons.favorite_rounded,
-                            size: 18,
+                            size: 16,
                             color: i < _engine.hp
                                 ? const Color(0xFFFF4081)
                                 : const Color(0xFF334155),
@@ -176,7 +223,7 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                           padding: EdgeInsets.only(left: 4),
                           child: Icon(
                             Icons.shield_rounded,
-                            size: 18,
+                            size: 16,
                             color: Color(0xFF00E676),
                           ),
                         ),
@@ -194,7 +241,6 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                 ],
               ),
               const Spacer(),
-              // Audio & Pause icon buttons
               Row(
                 children: [
                   _hudIconButton(
@@ -337,11 +383,27 @@ class _ArcadeScreenState extends State<ArcadeScreen>
   }
 
   Widget _buildTitleOverlay() {
+    final spec = _engine.activeShipSpec;
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         child: Column(
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildCoinChip(_engine.coins),
+                _hudIconButton(
+                  icon: _engine.isMuted
+                      ? Icons.volume_off_rounded
+                      : Icons.volume_up_rounded,
+                  color: _engine.isMuted
+                      ? const Color(0xFF64748B)
+                      : const Color(0xFF00E5FF),
+                  onTap: _engine.toggleMute,
+                ),
+              ],
+            ),
             const Spacer(flex: 2),
             const Text(
               'NEON',
@@ -369,23 +431,23 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            const Text(
-              'CYBERPUNK ARCADE SHOOTER',
+            const SizedBox(height: 10),
+            Text(
+              'FIGHTER: ${spec.name}',
               style: TextStyle(
-                color: Color(0xFF94A3B8),
+                color: spec.primaryColor,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 3.0,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.6,
               ),
             ),
             if (_engine.highScore > 0) ...[
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               Text(
                 'BEST SCORE: ${_engine.highScore}',
                 style: const TextStyle(
                   color: Color(0xFFFFD740),
-                  fontSize: 14,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.8,
                 ),
@@ -393,8 +455,8 @@ class _ArcadeScreenState extends State<ArcadeScreen>
             ],
             const Spacer(flex: 4),
             SizedBox(
-              width: 230,
-              height: 56,
+              width: 235,
+              height: 54,
               child: FilledButton(
                 onPressed: _engine.startGame,
                 style: FilledButton.styleFrom(
@@ -407,25 +469,382 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                 child: const Text(
                   'LAUNCH MISSION',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 2.0,
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 235,
+              height: 46,
+              child: OutlinedButton.icon(
+                onPressed: _engine.openHangar,
+                icon: const Icon(Icons.rocket_launch_rounded, size: 18),
+                label: const Text(
+                  'HANGAR & UPGRADES',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.6,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFFFD740),
+                  side: const BorderSide(color: Color(0xFFFFD740), width: 1.6),
+                  shape: const StadiumBorder(),
+                  backgroundColor: const Color(0xFF090D1A).withAlpha(150),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             const Text(
-              'Geser 1 jari untuk terbang • Auto-Fire aktif',
+              'Geser 1 jari untuk terbang • Kumpulkan koin emas',
               style: TextStyle(
                 color: Color(0xFF94A3B8),
-                fontSize: 12,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const Spacer(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildHangarOverlay() {
+    final spec = kShipSpecs[_engine.previewShip]!;
+    final unlocked = _engine.isShipUnlocked(_engine.previewShip);
+    final equipped = _engine.selectedShip == _engine.previewShip;
+    final canAffordShip = _engine.coins >= spec.unlockCost;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
+        child: Column(
+          children: [
+            // Top bar
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _hudIconButton(
+                  icon: Icons.arrow_back_rounded,
+                  color: Colors.white,
+                  onTap: _engine.returnToTitle,
+                ),
+                const Text(
+                  'STARFIGHTER HANGAR',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.4,
+                  ),
+                ),
+                _buildCoinChip(_engine.coins),
+              ],
+            ),
+
+            // Space for the live 1.65x animated ship hovering on canvas
+            const Spacer(flex: 5),
+
+            // Fighter selector pills (3 ships)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: ShipType.values.map((t) {
+                final s = kShipSpecs[t]!;
+                final active = _engine.previewShip == t;
+                final isOwned = _engine.isShipUnlocked(t);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: GestureDetector(
+                    onTap: () => _engine.selectPreviewShip(t),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: active
+                            ? s.primaryColor.withAlpha(45)
+                            : const Color(0xFF090D1A).withAlpha(170),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: active
+                              ? s.primaryColor
+                              : const Color(0xFF334155),
+                          width: active ? 1.8 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!isOwned)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(
+                                Icons.lock_rounded,
+                                size: 12,
+                                color: active
+                                    ? s.primaryColor
+                                    : const Color(0xFF64748B),
+                              ),
+                            ),
+                          Text(
+                            s.name,
+                            style: TextStyle(
+                              color: active ? Colors.white : const Color(0xFF94A3B8),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 10),
+
+            // Ship role & neon stat bars (minimal HUD, no boxy card)
+            Text(
+              spec.role,
+              style: TextStyle(
+                color: spec.primaryColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.0,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildStatBar(
+              'HULL',
+              (spec.baseHp + _engine.hullUpgradeLv) / 10.0,
+              const Color(0xFFFF4081),
+              '${spec.baseHp + _engine.hullUpgradeLv} HP',
+            ),
+            const SizedBox(height: 5),
+            _buildStatBar(
+              'FIRE',
+              (spec.fireRateMult * (1 + _engine.fireUpgradeLv * 0.1) / 2.0)
+                  .clamp(0.1, 1.0),
+              spec.primaryColor,
+              '${(spec.fireRateMult * (1 + _engine.fireUpgradeLv * 0.1) * 100).round()}%',
+            ),
+            const SizedBox(height: 5),
+            _buildStatBar(
+              'AGILITY',
+              (spec.moveFollowSpeed / 26.0).clamp(0.2, 1.0),
+              const Color(0xFF00E676),
+              'COINS x${spec.coinMult.toStringAsFixed(2)}',
+            ),
+            const SizedBox(height: 14),
+
+            // Permanent Coin Upgrades (3 sleek HUD rows)
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'PERMANENT TECH UPGRADES',
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.8,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildUpgradeRow(
+              label: 'HULL ARMOR (+1 HP)',
+              level: _engine.hullUpgradeLv,
+              cost: _engine.hullUpgradeCost,
+              color: const Color(0xFFFF4081),
+              onUpgrade: _engine.buyHullUpgrade,
+            ),
+            const SizedBox(height: 7),
+            _buildUpgradeRow(
+              label: 'PLASMA CORE (+10% ROF)',
+              level: _engine.fireUpgradeLv,
+              cost: _engine.fireUpgradeCost,
+              color: const Color(0xFF00E5FF),
+              onUpgrade: _engine.buyFireUpgrade,
+            ),
+            const SizedBox(height: 7),
+            _buildUpgradeRow(
+              label: 'MAGNET & EMP (+RANGE)',
+              level: _engine.magnetUpgradeLv,
+              cost: _engine.magnetUpgradeCost,
+              color: const Color(0xFFFFD740),
+              onUpgrade: _engine.buyMagnetUpgrade,
+            ),
+
+            const Spacer(flex: 1),
+
+            // Bottom action button: UNLOCK or DEPLOY
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: FilledButton(
+                onPressed: unlocked
+                    ? (equipped
+                        ? _engine.startGame
+                        : _engine.unlockOrEquipPreviewShip)
+                    : (canAffordShip ? _engine.unlockOrEquipPreviewShip : null),
+                style: FilledButton.styleFrom(
+                  backgroundColor: unlocked
+                      ? spec.primaryColor
+                      : const Color(0xFFFFD740),
+                  foregroundColor: const Color(0xFF050714),
+                  disabledBackgroundColor: const Color(0xFF1E293B),
+                  disabledForegroundColor: const Color(0xFF64748B),
+                  shape: const StadiumBorder(),
+                ),
+                child: Text(
+                  unlocked
+                      ? (equipped ? 'DEPLOY ${spec.name}' : 'EQUIP ${spec.name}')
+                      : 'UNLOCK ${spec.name} (${spec.unlockCost} COINS)',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.6,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatBar(String label, double ratio, Color color, String value) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 58,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio.clamp(0.05, 1.0),
+              minHeight: 6,
+              backgroundColor: const Color(0xFF1E293B),
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 78,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: color,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUpgradeRow({
+    required String label,
+    required int level,
+    required int cost,
+    required Color color,
+    required VoidCallback onUpgrade,
+  }) {
+    final isMax = level >= ArcadeGameEngine.maxUpgradeLevel;
+    final canAfford = !isMax && _engine.coins >= cost;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF090D1A).withAlpha(175),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withAlpha(75)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    for (int i = 0; i < ArcadeGameEngine.maxUpgradeLevel; i++)
+                      Container(
+                        width: 22,
+                        height: 5,
+                        margin: const EdgeInsets.only(right: 4),
+                        decoration: BoxDecoration(
+                          color: i < level ? color : const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: canAfford ? onUpgrade : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: isMax
+                    ? const Color(0xFF00E676).withAlpha(35)
+                    : (canAfford
+                        ? color.withAlpha(45)
+                        : const Color(0xFF1E293B)),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isMax
+                      ? const Color(0xFF00E676)
+                      : (canAfford ? color : const Color(0xFF334155)),
+                ),
+              ),
+              child: Text(
+                isMax ? 'MAX' : '$cost C',
+                style: TextStyle(
+                  color: isMax
+                      ? const Color(0xFF00E676)
+                      : (canAfford ? Colors.white : const Color(0xFF64748B)),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -483,7 +902,7 @@ class _ArcadeScreenState extends State<ArcadeScreen>
 
   Widget _buildGameOverOverlay() {
     return Container(
-      color: const Color(0xFF050714).withAlpha(200),
+      color: const Color(0xFF050714).withAlpha(205),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -500,7 +919,7 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             Text(
               '${_engine.score}',
               style: const TextStyle(
@@ -513,16 +932,26 @@ class _ArcadeScreenState extends State<ArcadeScreen>
             Text(
               'WAVE ${_engine.wave}  •  BEST ${_engine.highScore}',
               style: const TextStyle(
-                color: Color(0xFFFFD740),
+                color: Color(0xFF00E5FF),
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.6,
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 10),
+            Text(
+              '+${_engine.runCoins} COINS EARNED  (TOTAL: ${_engine.coins})',
+              style: const TextStyle(
+                color: Color(0xFFFFD740),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 28),
             SizedBox(
-              width: 210,
-              height: 52,
+              width: 220,
+              height: 50,
               child: FilledButton(
                 onPressed: _engine.startGame,
                 style: FilledButton.styleFrom(
@@ -541,6 +970,27 @@ class _ArcadeScreenState extends State<ArcadeScreen>
               ),
             ),
             const SizedBox(height: 12),
+            SizedBox(
+              width: 220,
+              height: 44,
+              child: OutlinedButton(
+                onPressed: _engine.openHangar,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFFFD740),
+                  side: const BorderSide(color: Color(0xFFFFD740), width: 1.5),
+                  shape: const StadiumBorder(),
+                ),
+                child: const Text(
+                  'HANGAR & UPGRADES',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.4,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             TextButton(
               onPressed: _engine.returnToTitle,
               child: const Text(
