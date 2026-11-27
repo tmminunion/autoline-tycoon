@@ -7,7 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test('ArcadeGameEngine starts mission, fires lasers, and triggers EMP', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
     final engine = ArcadeGameEngine();
+    engine.sound.isMuted = true; // Disable native audio plugin in headless tests
     engine.setViewport(const Size(400, 800));
     engine.startGame();
 
