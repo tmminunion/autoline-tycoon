@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/game_models.dart';
+import 'sound_service.dart';
 
 class GameController extends ChangeNotifier {
   static const String _saveKey = 'autoline_tycoon_save_v1';
   static const int _maxOfflineSeconds = 8 * 3600; // 8 hours cap
+
+  final SoundService sound = SoundService();
 
   double cash = 50.0;
   int totalUnitsShipped = 0;
@@ -32,6 +35,7 @@ class GameController extends ChangeNotifier {
   }
 
   bool get isInitialized => _initialized;
+  bool get isMuted => sound.isMuted;
   bool get isTurboActive => turboRemainingSeconds > 0;
   bool get canActivateTurbo =>
       turboRemainingSeconds <= 0 && turboCooldownSeconds <= 0;
@@ -141,6 +145,12 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleMute() {
+    sound.isMuted = !sound.isMuted;
+    notifyListeners();
+    saveGame();
+  }
+
   void _tick(double dt) {
     if (turboRemainingSeconds > 0) {
       turboRemainingSeconds = max(0.0, turboRemainingSeconds - dt);
@@ -212,6 +222,7 @@ class GameController extends ChangeNotifier {
       }
     }
 
+    sound.playTapBoost();
     station.progress += 0.25;
     if (station.progress >= 1.0) {
       _completeStationCycle(index);
@@ -226,6 +237,7 @@ class GameController extends ChangeNotifier {
 
     cash -= cost;
     station.speedLevel += 1;
+    sound.playUpgrade();
     notifyListeners();
     saveGame();
     return true;
@@ -238,6 +250,7 @@ class GameController extends ChangeNotifier {
 
     cash -= cost;
     station.batchLevel += 1;
+    sound.playUpgrade();
     notifyListeners();
     saveGame();
     return true;
@@ -249,6 +262,7 @@ class GameController extends ChangeNotifier {
 
     cash -= next.unlockCost;
     productTierIndex += 1;
+    sound.playTierUp();
     notifyListeners();
     saveGame();
     return true;
@@ -257,6 +271,7 @@ class GameController extends ChangeNotifier {
   void activateTurbo() {
     if (!canActivateTurbo) return;
     turboRemainingSeconds = 30.0;
+    sound.playTurbo();
     notifyListeners();
   }
 
@@ -265,6 +280,7 @@ class GameController extends ChangeNotifier {
       cash += pendingOfflineEarnings;
       final units = (pendingOfflineEarnings / currentProduct.unitValue).floor();
       totalUnitsShipped += units;
+      sound.playTierUp();
     }
     pendingOfflineEarnings = 0.0;
     pendingOfflineSeconds = 0;
@@ -279,6 +295,7 @@ class GameController extends ChangeNotifier {
         'cash': cash,
         'totalUnitsShipped': totalUnitsShipped,
         'productTierIndex': productTierIndex,
+        'isMuted': sound.isMuted,
         'savedAtMs': DateTime.now().millisecondsSinceEpoch,
         'stations': stations.map((s) => s.toJson()).toList(),
       };
@@ -297,6 +314,7 @@ class GameController extends ChangeNotifier {
       final data = jsonDecode(raw) as Map<String, dynamic>;
       cash = (data['cash'] as num?)?.toDouble() ?? 50.0;
       totalUnitsShipped = (data['totalUnitsShipped'] as num?)?.toInt() ?? 0;
+      sound.isMuted = (data['isMuted'] as bool?) ?? false;
       final savedTier = (data['productTierIndex'] as num?)?.toInt() ?? 0;
       productTierIndex = savedTier.clamp(0, kProductTiers.length - 1);
 
@@ -353,6 +371,7 @@ class GameController extends ChangeNotifier {
   void dispose() {
     _tickTimer?.cancel();
     _autoSaveTimer?.cancel();
+    sound.dispose();
     saveGame();
     super.dispose();
   }

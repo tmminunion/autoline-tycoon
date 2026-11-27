@@ -205,6 +205,18 @@ class _FactoryScreenState extends State<FactoryScreen>
         ),
         actions: [
           IconButton(
+            tooltip: _controller.isMuted ? 'Unmute SFX' : 'Mute SFX',
+            onPressed: _controller.toggleMute,
+            icon: Icon(
+              _controller.isMuted
+                  ? Icons.volume_off_rounded
+                  : Icons.volume_up_rounded,
+              color: _controller.isMuted
+                  ? const Color(0xFF64748B)
+                  : const Color(0xFF00E5FF),
+            ),
+          ),
+          IconButton(
             tooltip: 'Reset Progress',
             onPressed: _confirmReset,
             icon: const Icon(Icons.restart_alt_rounded, color: Color(0xFF94A3B8)),

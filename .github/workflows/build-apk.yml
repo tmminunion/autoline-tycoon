@@ -71,8 +71,10 @@ jobs:
           open(mpath, "w", encoding="utf-8").write(m)
           PYEOF
 
-      - name: Install Dependencies
-        run: flutter pub get
+      - name: Install Dependencies & Generate App Icons
+        run: |
+          flutter pub get
+          dart run flutter_launcher_icons
 
       - name: Static Analysis
         run: flutter analyze --no-fatal-infos
