@@ -1,0 +1,87 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build-apk:
+    name: Analyze, Test & Build Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Flutter (Stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Bootstrap Android Project
+        run: |
+          rm -rf android /tmp/autoline_tpl
+          flutter create /tmp/autoline_tpl --project-name autoline_tycoon --org id.nufat --platforms=android
+          cp -r /tmp/autoline_tpl/android ./android
+          rm -rf /tmp/autoline_tpl
+
+          python3 - <<'PYEOF'
+          import re
+          mpath = "android/app/src/main/AndroidManifest.xml"
+          m = open(mpath, "r", encoding="utf-8").read()
+          m = re.sub(r'android:label="[^"]*"', 'android:label="AutoLine Tycoon"', m)
+          open(mpath, "w", encoding="utf-8").write(m)
+          PYEOF
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Analyze Code
+        run: flutter analyze
+
+      - name: Run Tests
+        run: flutter test
+
+      - name: Build Release APK
+        run: |
+          flutter build apk --release \
+            --build-name="1.0.${{ github.run_number }}" \
+            --build-number="${{ github.run_number }}"
+
+          mkdir -p release-artifacts
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "release-artifacts/AutoLine-Tycoon-v1.0.${{ github.run_number }}.apk"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoLine-Tycoon-APK-v1.0.${{ github.run_number }}
+          path: release-artifacts/*.apk
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: AutoLine Tycoon v1.0.${{ github.run_number }}
+          body: |
+            Build otomatis Android Release APK untuk **AutoLine Tycoon**.
+            Unduh file `.apk` di bawah untuk langsung install di Android.
+          files: release-artifacts/*.apk
+          make_latest: true
