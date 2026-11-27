@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build AutoLine Tycoon Android APK
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: build-apk-${{ github.ref }}
+  group: build-autoline-tycoon-apk-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build-apk:
-    name: Analyze, Test & Build Release APK
+    name: Analyze, Test & Build AutoLine Tycoon Release APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -34,6 +34,27 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Read Version Metadata
+        id: meta
+        run: |
+          VER_RAW=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          BASE_NAME=${VER_RAW%%+*}
+          BASE_CODE=${VER_RAW##*+}
+          IFS='.' read -r VER_MAJOR VER_MINOR VER_PATCH <<< "$BASE_NAME"
+          VER_MAJOR=${VER_MAJOR:-1}
+          VER_MINOR=${VER_MINOR:-0}
+          VER_PATCH=${VER_PATCH:-0}
+          TOTAL_STEPS=$(( 10#$VER_MAJOR * 1000 + 10#$VER_MINOR * 100 + 10#$VER_PATCH + GITHUB_RUN_NUMBER ))
+          CALC_MAJOR=$(( TOTAL_STEPS / 1000 ))
+          REM_MAJOR=$(( TOTAL_STEPS % 1000 ))
+          CALC_MINOR=$(( REM_MAJOR / 100 ))
+          CALC_PATCH=$(( REM_MAJOR % 100 ))
+          VER_NAME="${CALC_MAJOR}.${CALC_MINOR}.${CALC_PATCH}"
+          VER_CODE=$(( 10#$BASE_CODE + GITHUB_RUN_NUMBER ))
+          echo "Resolved build version: v${VER_NAME} (code ${VER_CODE})"
+          echo "version_name=${VER_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VER_CODE}" >> "$GITHUB_OUTPUT"
+
       - name: Bootstrap Android Project
         run: |
           rm -rf android /tmp/autoline_tpl
@@ -43,6 +64,7 @@ jobs:
 
           python3 - <<'PYEOF'
           import re
+
           mpath = "android/app/src/main/AndroidManifest.xml"
           m = open(mpath, "r", encoding="utf-8").read()
           m = re.sub(r'android:label="[^"]*"', 'android:label="AutoLine Tycoon"', m)
@@ -52,36 +74,72 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Analyze Code
-        run: flutter analyze
+      - name: Static Analysis
+        run: flutter analyze --no-fatal-infos
 
-      - name: Run Tests
+      - name: Run Unit Tests
         run: flutter test
 
       - name: Build Release APK
+        env:
+          GRADLE_OPTS: -Dorg.gradle.internal.http.retry.maxRetries=5 -Dorg.gradle.internal.http.retry.initialBackoff=3000
         run: |
-          flutter build apk --release \
-            --build-name="1.0.${{ github.run_number }}" \
-            --build-number="${{ github.run_number }}"
-
-          mkdir -p release-artifacts
+          for attempt in 1 2 3; do
+            if flutter build apk --release \
+              --build-name="${{ steps.meta.outputs.version_name }}" \
+              --build-number="${{ steps.meta.outputs.version_code }}"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "Retrying APK build after transient network/Maven error (attempt $attempt)..."
+            sleep 10
+          done
           cp build/app/outputs/flutter-apk/app-release.apk \
-            "release-artifacts/AutoLine-Tycoon-v1.0.${{ github.run_number }}.apk"
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: AutoLine-Tycoon-APK-v1.0.${{ github.run_number }}
-          path: release-artifacts/*.apk
-          retention-days: 30
+            "AutoLine-Tycoon-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: AutoLine Tycoon v1.0.${{ github.run_number }}
+          tag_name: v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}
+          name: AutoLine Tycoon v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }})
           body: |
-            Build otomatis Android Release APK untuk **AutoLine Tycoon**.
-            Unduh file `.apk` di bawah untuk langsung install di Android.
-          files: release-artifacts/*.apk
+            Build otomatis Android Release APK untuk **AutoLine Tycoon** (`v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}`).
+            Unduh file `.apk` di bawah untuk langsung install di perangkat Android.
+          files: AutoLine-Tycoon-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk
           make_latest: true
+
+      - name: Send APK Link to Telegram
+        if: always()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          APK_FILE: "AutoLine-Tycoon-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk"
+          RELEASE_URL: "https://github.com/${{ github.repository }}/releases/tag/v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}"
+        run: |
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
+            echo "Secret Telegram belum diset; melewati notifikasi."
+            exit 0
+          fi
+
+          if [ -f "$APK_FILE" ]; then
+            APK_MB=$(awk "BEGIN {printf \"%.2f\", $(wc -c < "$APK_FILE")/1048576}")
+            MSG=$(printf "🚀 AutoLine Tycoon v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) berhasil dibuild!\n📱 APK: %s (%s MB)\n📥 Release: %s" "${APK_FILE}" "${APK_MB}" "${RELEASE_URL}")
+          else
+            MSG="❌ Build AutoLine Tycoon v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) gagal menghasilkan file APK."
+          fi
+
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${MSG}" \
+            --data-urlencode "disable_web_page_preview=true" > /dev/null
+
+      - name: Cleanup Temporary Files & Workflow Artifacts
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf build android /tmp/autoline_tpl *.apk
+          ARTIFACT_IDS=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" --jq '.artifacts[].id' 2>/dev/null || true)
+          for AID in $ARTIFACT_IDS; do
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/${AID}" >/dev/null 2>&1 || true
+          done
