@@ -1,16 +1,11 @@
-# AutoLine Tycoon
+# Neon Striker — Cyberpunk Arcade Shooter
 
-Game simulasi manajemen lini produksi (*Idle / Tycoon*) untuk Android yang dibangun dengan **Flutter**.
+Game arcade shooter vertikal 60 FPS *full-screen canvas* untuk Android yang dibangun dengan **Flutter CustomPainter + Ticker** (tanpa tampilan card seperti HTML).
 
 ## Fitur Utama
-- **4 Stasiun Produksi Berurutan:** Stamping Press, Robotic Welding, Final Assembly, dan Quality Check (QC).
-- **Simulasi Bottleneck & WIP Buffer:** Tiap stasiun mengirim unit ke buffer stasiun berikutnya—pemain harus menyeimbangkan kecepatan lini agar output tidak tertahan.
-- **Tap-to-Boost & Turbo Mode:** Ketuk stasiun untuk mempercepat siklus secara manual atau aktifkan *2x Overdrive Turbo* selama 30 detik.
-- **Upgrade Speed, Batch & R&D Product Tier:** Tingkatkan kecepatan mesin, kapasitas batch, serta nilai jual unit dari *Compact Car* hingga *Cyber Mecha*.
-- **Auto-Save & Offline Earnings:** Progres tersimpan otomatis secara lokal dan tetap menghasilkan pendapatan saat aplikasi ditutup (maksimal 8 jam).
-
-## Build APK Otomatis (GitHub Actions)
-Setiap push ke branch `main` (atau manual lewat tab **Actions**) akan otomatis:
-1. Men-generate scaffold Android dengan Flutter Stable.
-2. Menjalankan `flutter analyze` & `flutter build apk --release`.
-3. Mengunggah file `.apk` ke **Artifacts** sekaligus merilisnya di halaman **GitHub Releases**.
+- **60 FPS Full-Screen Neon Canvas:** Latar *deep-space* dengan *parallax starfield*, *synthwave grid* bergerak, efek *neon glow*, partikel ledakan, dan *camera screen shake*.
+- **Kontrol Satu Jari Responsif:** Geser di mana saja di layar (dengan offset ibu jari) untuk manuver pesawat, lengkap dengan *auto-fire* laser.
+- **4 Tipe Musuh + Boss Dreadnought:** Scout Dart, Striker Interceptor, Heavy Cruiser, hingga Boss Dreadnought tiap 4 wave dengan pola tembakan kipas & bar HP khusus.
+- **Power-Up & EMP Shockwave:** Upgrade senjata hingga 5-Way Plasma (`W`), Energy Shield (`S`), 2X Overdrive (`2X`), serta bom EMP (`E`) yang membersihkan peluru dan menghantam seluruh layar.
+- **Audio SFX & Haptic Feedback:** Efek suara sintetis (*laser, explosion, powerup, hit, EMP*) + getaran haptik dan tombol *mute*.
+- **Build APK Otomatis:** Push ke `main` otomatis membangun Release APK, menerbitkan ke **GitHub Releases**, dan mengirim notifikasi ke **Telegram**.

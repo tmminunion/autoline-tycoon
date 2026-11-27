@@ -4,12 +4,15 @@ import 'package:flutter/services.dart';
 class SoundService {
   bool isMuted = false;
 
-  AudioPlayer? _tapPlayer;
+  AudioPlayer? _laserPlayer;
   AudioPlayer? _fxPlayer;
+  AudioPlayer? _explPlayer;
 
-  AudioPlayer _getTapPlayer() {
-    _tapPlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.stop);
-    return _tapPlayer!;
+  int _lastLaserMs = 0;
+
+  AudioPlayer _getLaserPlayer() {
+    _laserPlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.stop);
+    return _laserPlayer!;
   }
 
   AudioPlayer _getFxPlayer() {
@@ -17,67 +20,90 @@ class SoundService {
     return _fxPlayer!;
   }
 
-  Future<void> playTapBoost() async {
+  AudioPlayer _getExplPlayer() {
+    _explPlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.stop);
+    return _explPlayer!;
+  }
+
+  Future<void> playLaser() async {
+    if (isMuted) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastLaserMs < 110) return;
+    _lastLaserMs = now;
     try {
-      await HapticFeedback.lightImpact();
+      final p = _getLaserPlayer();
+      await p.stop();
+      await p.play(
+        AssetSource('sfx/laser.wav'),
+        volume: 0.35,
+        mode: PlayerMode.lowLatency,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> playExplosion({bool heavy = false}) async {
+    try {
+      if (heavy) {
+        await HapticFeedback.heavyImpact();
+      } else {
+        await HapticFeedback.lightImpact();
+      }
     } catch (_) {}
     if (isMuted) return;
     try {
-      final player = _getTapPlayer();
-      await player.stop();
-      await player.play(
-        AssetSource('sfx/tap.wav'),
-        volume: 0.75,
+      final p = _getExplPlayer();
+      await p.stop();
+      await p.play(
+        AssetSource('sfx/explosion.wav'),
+        volume: heavy ? 0.9 : 0.6,
         mode: PlayerMode.lowLatency,
       );
-    } catch (_) {
-      // Safe fallback in headless test environments
-    }
+    } catch (_) {}
   }
 
-  Future<void> playUpgrade() async {
+  Future<void> playPowerUp() async {
     try {
       await HapticFeedback.mediumImpact();
     } catch (_) {}
     if (isMuted) return;
     try {
-      final player = _getFxPlayer();
-      await player.stop();
-      await player.play(
-        AssetSource('sfx/upgrade.wav'),
+      final p = _getFxPlayer();
+      await p.stop();
+      await p.play(
+        AssetSource('sfx/powerup.wav'),
         volume: 0.85,
         mode: PlayerMode.lowLatency,
       );
     } catch (_) {}
   }
 
-  Future<void> playTierUp() async {
+  Future<void> playHit() async {
     try {
       await HapticFeedback.heavyImpact();
     } catch (_) {}
     if (isMuted) return;
     try {
-      final player = _getFxPlayer();
-      await player.stop();
-      await player.play(
-        AssetSource('sfx/tier_up.wav'),
-        volume: 0.9,
+      final p = _getFxPlayer();
+      await p.stop();
+      await p.play(
+        AssetSource('sfx/hit.wav'),
+        volume: 0.85,
         mode: PlayerMode.lowLatency,
       );
     } catch (_) {}
   }
 
-  Future<void> playTurbo() async {
+  Future<void> playEmp() async {
     try {
       await HapticFeedback.heavyImpact();
     } catch (_) {}
     if (isMuted) return;
     try {
-      final player = _getFxPlayer();
-      await player.stop();
-      await player.play(
-        AssetSource('sfx/turbo.wav'),
-        volume: 0.9,
+      final p = _getFxPlayer();
+      await p.stop();
+      await p.play(
+        AssetSource('sfx/emp.wav'),
+        volume: 0.95,
         mode: PlayerMode.lowLatency,
       );
     } catch (_) {}
@@ -85,8 +111,9 @@ class SoundService {
 
   void dispose() {
     try {
-      _tapPlayer?.dispose();
+      _laserPlayer?.dispose();
       _fxPlayer?.dispose();
+      _explPlayer?.dispose();
     } catch (_) {}
   }
 }
