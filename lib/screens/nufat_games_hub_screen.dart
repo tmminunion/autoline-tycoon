@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -5,6 +7,28 @@ import '../games/neon_dash/dash_screen.dart';
 import '../services/remote_games_service.dart';
 import 'arcade_screen.dart';
 import 'web_game_player_screen.dart';
+
+class _HubGameItem {
+  const _HubGameItem({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.isNative,
+    required this.colors,
+    required this.icon,
+    required this.bestScore,
+    required this.onTap,
+  });
+
+  final String id;
+  final String title;
+  final String subtitle;
+  final bool isNative;
+  final List<Color> colors;
+  final IconData icon;
+  final int bestScore;
+  final VoidCallback onTap;
+}
 
 class NufatGamesHubScreen extends StatefulWidget {
   const NufatGamesHubScreen({super.key});
@@ -14,6 +38,11 @@ class NufatGamesHubScreen extends StatefulWidget {
 }
 
 class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
+  int _topTab = 1; // 0: Semua, 1: Game, 2: Native, 3: Cloud
+  int _bottomTab = 0; // 0: Main, 1: Cloud, 3: Skor, 4: Aku
+  bool _searching = false;
+  final TextEditingController _searchCtrl = TextEditingController();
+
   int _strikerBest = 0;
   int _dashBest = 0;
   List<RemoteWebGame> _remoteGames = RemoteGamesService.fallbackGames;
@@ -25,6 +54,12 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
   void initState() {
     super.initState();
     _loadAll();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAll() async {
@@ -65,343 +100,690 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
     await _loadScores();
   }
 
+  List<_HubGameItem> _buildAllItems() {
+    final items = <_HubGameItem>[
+      _HubGameItem(
+        id: 'neon-striker',
+        title: 'NEON STRIKER',
+        subtitle: _strikerBest > 0 ? 'Best $_strikerBest' : 'Arcade Shooter',
+        isNative: true,
+        colors: const [Color(0xFF00C6FF), Color(0xFF0072FF)],
+        icon: Icons.rocket_launch_rounded,
+        bestScore: _strikerBest,
+        onTap: () => _openGame(const ArcadeScreen()),
+      ),
+      _HubGameItem(
+        id: 'neon-dash',
+        title: 'NEON DASH',
+        subtitle: _dashBest > 0 ? 'Best $_dashBest' : 'Endless Runner',
+        isNative: true,
+        colors: const [Color(0xFFFFA726), Color(0xFFFF5722)],
+        icon: Icons.bolt_rounded,
+        bestScore: _dashBest,
+        onTap: () => _openGame(const DashScreen()),
+      ),
+    ];
+
+    const cloudPalettes = [
+      [Color(0xFFA855F7), Color(0xFF6366F1)],
+      [Color(0xFF10B981), Color(0xFF059669)],
+      [Color(0xFFEC4899), Color(0xFFF43F5E)],
+      [Color(0xFF06B6D4), Color(0xFF3B82F6)],
+    ];
+
+    for (int i = 0; i < _remoteGames.length; i++) {
+      final g = _remoteGames[i];
+      final best = _webBests[g.id] ?? 0;
+      items.add(
+        _HubGameItem(
+          id: g.id,
+          title: g.title,
+          subtitle: best > 0 ? 'Best $best' : g.genre,
+          isNative: false,
+          colors: cloudPalettes[i % cloudPalettes.length],
+          icon: Icons.layers_rounded,
+          bestScore: best,
+          onTap: () => _openGame(WebGamePlayerScreen(game: g)),
+        ),
+      );
+    }
+    return items;
+  }
+
+  void _quickPlayRandom() {
+    final all = _buildAllItems();
+    if (all.isEmpty) return;
+    final pick = all[Random().nextInt(all.length)];
+    pick.onTap();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final totalGames = 2 + _remoteGames.length;
+    final allItems = _buildAllItems();
+    final q = _searchCtrl.text.trim().toLowerCase();
+    final filtered = allItems.where((g) {
+      if (_topTab == 2 && !g.isNative) return false;
+      if (_topTab == 3 && g.isNative) return false;
+      if (q.isNotEmpty && !g.title.toLowerCase().contains(q) && !g.subtitle.toLowerCase().contains(q)) {
+        return false;
+      }
+      return true;
+    }).toList();
+
     return Scaffold(
-      backgroundColor: const Color(0xFF050714),
+      backgroundColor: const Color(0xFFF7F8FA),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: const Color(0xFF00E5FF),
-          backgroundColor: const Color(0xFF0B1124),
-          onRefresh: _loadAll,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-            children: [
-              // Compact Hub Header
-              Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF00E5FF), Color(0xFF3B82F6)],
+        child: Column(
+          children: [
+            _buildTopBar(),
+            Expanded(
+              child: _bottomTab == 3
+                  ? _buildScoresView(allItems)
+                  : _bottomTab == 4
+                      ? _buildProfileView(allItems)
+                      : _buildGamesHome(allItems, filtered),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildTopBar() {
+    const tabs = ['Semua', 'Game', 'Native', 'Cloud'];
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 10, 12, 8),
+      child: _searching
+          ? Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    autofocus: true,
+                    style: const TextStyle(color: Color(0xFF111827), fontSize: 14, fontWeight: FontWeight.w600),
+                    decoration: InputDecoration(
+                      hintText: 'Cari game di Nufat Games...',
+                      hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
+                      prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF6B7280)),
+                      filled: true,
+                      fillColor: const Color(0xFFF3F4F6),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(999),
+                        borderSide: BorderSide.none,
                       ),
                     ),
-                    child: const Icon(Icons.sports_esports_rounded, color: Color(0xFF050714), size: 26),
+                    onChanged: (_) => setState(() {}),
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'NUFAT GAMES',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.0,
-                            color: Colors.white,
+                ),
+                TextButton(
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _searching = false);
+                  },
+                  child: const Text('Batal', style: TextStyle(color: Color(0xFF4B5563), fontWeight: FontWeight.w700)),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                for (int i = 0; i < tabs.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 18),
+                    child: GestureDetector(
+                      onTap: () => setState(() {
+                        _topTab = i;
+                        _bottomTab = 0;
+                      }),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            tabs[i],
+                            style: TextStyle(
+                              fontSize: _topTab == i ? 20 : 15,
+                              fontWeight: _topTab == i ? FontWeight.w900 : FontWeight.w600,
+                              color: _topTab == i ? const Color(0xFF111827) : const Color(0xFF9CA3AF),
+                            ),
                           ),
+                          const SizedBox(height: 3),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 160),
+                            width: _topTab == i ? 18 : 0,
+                            height: 3.5,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFACC15),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _searching = true),
+                  icon: const Icon(Icons.search_rounded, color: Color(0xFF374151), size: 24),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildGamesHome(List<_HubGameItem> allItems, List<_HubGameItem> filtered) {
+    final cloudItems = allItems.where((e) => !e.isNative).toList();
+    return RefreshIndicator(
+      color: const Color(0xFFFF8C42),
+      onRefresh: _loadAll,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+        children: [
+          // Featured Orange Carousel Banner (inspired by clean modern arcade UI)
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFF8C42), Color(0xFFFFA94D)],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF8C42).withValues(alpha: 0.25),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0x38000000),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.local_fire_department_rounded, size: 14, color: Color(0xFFFDE047)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Nufat Games Populer',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: _loadingRemote ? null : _loadRemoteCatalog,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFF8B5CF6)]),
+                          borderRadius: BorderRadius.circular(999),
                         ),
-                        Text(
-                          'Hybrid Native 60 FPS & Cloud WebView',
-                          style: TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _loadingRemote ? Icons.sync_rounded : Icons.cloud_done_rounded,
+                              size: 13,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _remoteFromServer ? 'API Live ›' : 'Sync API ›',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0x1A00E5FF),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0x5500E5FF)),
-                    ),
-                    child: Text(
-                      '$totalGames GAMES',
-                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, color: Color(0xFF00E5FF)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Section 1: Ori Native Games
-              const _SectionHeader(
-                title: 'ORI NATIVE · OFFLINE 60 FPS',
-                badge: 'NATIVE',
-                badgeColor: Color(0xFF34D399),
-              ),
-              const SizedBox(height: 10),
-
-              _GameCard(
-                title: 'NEON STRIKER',
-                genre: 'Cyberpunk Arcade Shooter',
-                description:
-                    'Tembak gelombang musuh & Boss, kumpulkan koin, buka 3 pesawat di Hangar, dan picu EMP Shockwave!',
-                accent: const Color(0xFF00E5FF),
-                icon: Icons.rocket_launch_rounded,
-                modeBadge: 'ORI NATIVE',
-                bestScore: _strikerBest,
-                tags: const ['Offline', 'Hangar & Upgrade', 'Boss Wave'],
-                onPlay: () => _openGame(const ArcadeScreen()),
-              ),
-              const SizedBox(height: 12),
-
-              _GameCard(
-                title: 'NEON DASH',
-                genre: 'Cyberpunk Endless Runner',
-                description:
-                    'Lari tanpa batas! Double Jump & Slide hindari laser, kumpulkan koin, serta aktifkan Shield, Magnet & Turbo 2X.',
-                accent: const Color(0xFFFACC15),
-                icon: Icons.bolt_rounded,
-                modeBadge: 'ORI NATIVE',
-                bestScore: _dashBest,
-                tags: const ['Offline', 'Double Jump', 'Power-Ups'],
-                onPlay: () => _openGame(const DashScreen()),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Section 2: Cloud WebView Games (Dynamic via API)
-              Row(
-                children: [
-                  Expanded(
-                    child: _SectionHeader(
-                      title: 'CLOUD ARCADE · UPDATE VIA API',
-                      badge: _remoteFromServer ? 'LIVE API' : 'WEBVIEW',
-                      badgeColor: const Color(0xFFC084FC),
-                    ),
-                  ),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    onPressed: _loadingRemote ? null : _loadRemoteCatalog,
-                    icon: _loadingRemote
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFC084FC)),
-                          )
-                        : const Icon(Icons.sync_rounded, size: 18, color: Color(0xFFC084FC)),
-                    tooltip: 'Muat ulang katalog API',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              for (final g in _remoteGames) ...[
-                _GameCard(
-                  title: g.title,
-                  genre: g.genre,
-                  description: g.description,
-                  accent: g.accentColor,
-                  icon: Icons.public_rounded,
-                  modeBadge: 'WEBVIEW',
-                  bestScore: _webBests[g.id] ?? 0,
-                  tags: g.tags,
-                  onPlay: () => _openGame(WebGamePlayerScreen(game: g)),
+                  ],
                 ),
                 const SizedBox(height: 12),
+                SizedBox(
+                  height: 128,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: allItems.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (_, idx) {
+                      final g = allItems[idx];
+                      return GestureDetector(
+                        onTap: g.onTap,
+                        child: Container(
+                          width: 118,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: g.colors,
+                                    ),
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      Center(child: Icon(g.icon, color: Colors.white, size: 38)),
+                                      Positioned(
+                                        top: 6,
+                                        left: 6,
+                                        child: _CornerBadge(isNative: g.isNative),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                                child: Text(
+                                  g.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF9A3412),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ],
-            ],
+            ),
           ),
-        ),
+
+          const SizedBox(height: 18),
+
+          // 3-Column Clean Square Tile Grid
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: filtered.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 14,
+              childAspectRatio: 0.76,
+            ),
+            itemBuilder: (_, idx) => _SquareGameTile(item: filtered[idx]),
+          ),
+
+          if (cloudItems.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'DIREKOMENDASIKAN NUFAT',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF111827),
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF3F4F6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFF6B7280)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: cloudItems.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.76,
+                    ),
+                    itemBuilder: (_, idx) => _SquareGameTile(item: cloudItems[idx]),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
-}
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.badge,
-    required this.badgeColor,
-  });
-
-  final String title;
-  final String badge;
-  final Color badgeColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
+  Widget _buildScoresView(List<_HubGameItem> allItems) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.1,
-            color: Color(0xFF94A3B8),
-          ),
+        const Text(
+          'Rekor Skor Terbaik',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF111827)),
         ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-          decoration: BoxDecoration(
-            color: badgeColor.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: badgeColor.withValues(alpha: 0.45)),
-          ),
-          child: Text(
-            badge,
-            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: badgeColor),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _GameCard extends StatelessWidget {
-  const _GameCard({
-    required this.title,
-    required this.genre,
-    required this.description,
-    required this.accent,
-    required this.icon,
-    required this.modeBadge,
-    required this.bestScore,
-    required this.tags,
-    required this.onPlay,
-  });
-
-  final String title;
-  final String genre;
-  final String description;
-  final Color accent;
-  final IconData icon;
-  final String modeBadge;
-  final int bestScore;
-  final List<String> tags;
-  final VoidCallback onPlay;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPlay,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF0E1730),
-              accent.withValues(alpha: 0.12),
-            ],
-          ),
-          border: Border.all(color: accent.withValues(alpha: 0.45), width: 1.3),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        const SizedBox(height: 12),
+        for (final g in allItems)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Row(
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: accent.withValues(alpha: 0.5)),
+                    gradient: LinearGradient(colors: g.colors),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(icon, color: accent, size: 26),
+                  child: Icon(g.icon, color: Colors.white, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text(g.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF111827))),
                       Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      Text(
-                        genre,
-                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: accent),
+                        g.isNative ? 'Ori Native · Offline' : 'Cloud WebView · API',
+                        style: const TextStyle(fontSize: 11.5, color: Color(0xFF6B7280)),
                       ),
                     ],
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF060B18),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: accent.withValues(alpha: 0.45)),
-                      ),
-                      child: Text(
-                        modeBadge,
-                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w900, color: accent),
-                      ),
+                Text(
+                  '${g.bestScore}',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF059669)),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildProfileView(List<_HubGameItem> allItems) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Nufat Games', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
+              const SizedBox(height: 4),
+              const Text('Package: nufat.id.games', style: TextStyle(fontSize: 12.5, color: Color(0xFF6B7280), fontWeight: FontWeight.w600)),
+              const SizedBox(height: 12),
+              Text(
+                'Total koleksi aktif: ${allItems.length} game (2 Ori Native + ${_remoteGames.length} Cloud WebView).',
+                style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF8C42),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _loadRemoteCatalog,
+                icon: const Icon(Icons.sync_rounded, size: 18),
+                label: const Text('Sinkronkan Katalog API', style: TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+      ),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _NavBtn(
+              icon: Icons.sports_esports_rounded,
+              label: 'Main',
+              active: _bottomTab == 0,
+              onTap: () => setState(() {
+                _bottomTab = 0;
+                _topTab = 1;
+              }),
+            ),
+            _NavBtn(
+              icon: Icons.cloud_outlined,
+              label: 'Cloud',
+              active: _bottomTab == 1,
+              onTap: () => setState(() {
+                _bottomTab = 1;
+                _topTab = 3;
+              }),
+            ),
+            // Center Yellow Quick Play Pill (matching reference UI)
+            GestureDetector(
+              onTap: _quickPlayRandom,
+              child: Container(
+                width: 46,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFDE047),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFACC15).withValues(alpha: 0.45),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
                     ),
-                    if (bestScore > 0) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'BEST $bestScore',
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF34D399)),
-                      ),
-                    ],
                   ],
                 ),
-              ],
+                child: const Icon(Icons.play_arrow_rounded, color: Color(0xFF111827), size: 28),
+              ),
             ),
-            const SizedBox(height: 10),
+            _NavBtn(
+              icon: Icons.emoji_events_outlined,
+              label: 'Skor',
+              active: _bottomTab == 3,
+              onTap: () => setState(() => _bottomTab = 3),
+            ),
+            _NavBtn(
+              icon: Icons.person_outline_rounded,
+              label: 'Aku',
+              active: _bottomTab == 4,
+              onTap: () => setState(() => _bottomTab = 4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SquareGameTile extends StatelessWidget {
+  const _SquareGameTile({required this.item});
+
+  final _HubGameItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: item.onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: item.colors,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: item.colors.first.withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Center(child: Icon(item.icon, color: Colors.white, size: 42)),
+                  Positioned(
+                    top: 7,
+                    left: 7,
+                    child: _CornerBadge(isNative: item.isNative),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            item.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1F2937),
+            ),
+          ),
+          Text(
+            item.subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF9CA3AF),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CornerBadge extends StatelessWidget {
+  const _CornerBadge({required this.isNative});
+
+  final bool isNative;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: isNative ? const Color(0xFFFACC15) : const Color(0xFF111827).withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        isNative ? 'ORI' : 'WEB',
+        style: TextStyle(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w900,
+          color: isNative ? const Color(0xFF111827) : Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+class _NavBtn extends StatelessWidget {
+  const _NavBtn({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? const Color(0xFF111827) : const Color(0xFF9CA3AF);
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 23),
+            const SizedBox(height: 2),
             Text(
-              description,
-              style: const TextStyle(fontSize: 12.5, color: Color(0xFFCBD5E1), height: 1.45),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: tags
-                        .map(
-                          (t) => Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.06),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              t,
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8)),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: accent,
-                    foregroundColor: const Color(0xFF050714),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: onPlay,
-                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                  label: const Text('MAIN', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5)),
-                ),
-              ],
+              label,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                color: color,
+              ),
             ),
           ],
         ),

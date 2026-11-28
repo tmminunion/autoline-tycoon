@@ -8,7 +8,12 @@ void main() {
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
   runApp(const NufatGamesApp());
 }
 
@@ -22,11 +27,11 @@ class NufatGamesApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF050714),
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFF7F8FA),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF00E5FF),
-          brightness: Brightness.dark,
+          seedColor: const Color(0xFFFF8C42),
+          brightness: Brightness.light,
         ),
       ),
       home: const NufatGamesHubScreen(),

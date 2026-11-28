@@ -58,7 +58,7 @@ jobs:
       - name: Bootstrap Android Project
         run: |
           rm -rf android /tmp/autoline_tpl
-          flutter create /tmp/autoline_tpl --project-name autoline_tycoon --org id.nufat --platforms=android
+          flutter create /tmp/autoline_tpl --project-name games --org nufat.id --platforms=android
           cp -r /tmp/autoline_tpl/android ./android
           rm -rf /tmp/autoline_tpl
 

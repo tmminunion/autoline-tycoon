@@ -108,18 +108,18 @@ void main() {
     expect(parsed.first.title, 'NEON STACK');
   });
 
-  testWidgets('NufatGamesApp renders Hybrid Hub (Native + WebView) and launches Neon Striker',
+  testWidgets('NufatGamesApp renders modern clean Hub and launches Neon Striker',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const NufatGamesApp());
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('NUFAT GAMES'), findsOneWidget);
-    expect(find.text('NEON STRIKER'), findsOneWidget);
-    expect(find.text('NEON DASH'), findsOneWidget);
-    expect(find.text('NEON STACK'), findsOneWidget);
+    expect(find.text('Nufat Games Populer'), findsOneWidget);
+    expect(find.text('NEON STRIKER'), findsWidgets);
+    expect(find.text('NEON DASH'), findsWidgets);
+    expect(find.text('NEON STACK'), findsWidgets);
 
-    await tester.tap(find.text('NEON STRIKER'));
+    await tester.tap(find.text('NEON STRIKER').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
