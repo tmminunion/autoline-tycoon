@@ -35,6 +35,9 @@ class NeonBlockScreen extends StatefulWidget {
 
 class _NeonBlockScreenState extends State<NeonBlockScreen> {
   static const int _gridSize = 8;
+  static const double _boardPadding = 6.0;
+  static const double _gridSpacing = 4.0;
+  static const double _fingerLiftY = 72.0;
   static const String _bestKey = 'nufat_block_best_v1';
 
   static const List<Color> _palette = [
@@ -70,6 +73,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
 
   final Random _rng = Random();
   final GlobalKey _gridKey = GlobalKey();
+  final GlobalKey _stackKey = GlobalKey();
 
   late List<List<Color?>> _board;
   late List<_BlockPiece?> _tray;
@@ -79,7 +83,8 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
   bool _gameOver = false;
 
   int? _dragIndex;
-  Offset? _dragGlobalPos;
+  Offset? _dragStackPos; // Local coordinates inside _stackKey (matches Positioned!)
+  double _dragCellPx = 32.0; // Exact board cell size so floating block matches shadow 1:1
   int? _hoverRow;
   int? _hoverCol;
   bool _hoverValid = false;
@@ -114,9 +119,10 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
     _combo = 0;
     _gameOver = false;
     _dragIndex = null;
-    _dragGlobalPos = null;
+    _dragStackPos = null;
     _hoverRow = null;
     _hoverCol = null;
+    _hoverValid = false;
     _refillTray();
   }
 
@@ -165,25 +171,52 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
     final piece = _tray[_dragIndex!];
     if (piece == null) return;
 
-    final ctx = _gridKey.currentContext;
-    if (ctx == null) return;
-    final box = ctx.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
+    final gridCtx = _gridKey.currentContext;
+    final stackCtx = _stackKey.currentContext;
+    if (gridCtx == null || stackCtx == null) return;
+    final gridBox = gridCtx.findRenderObject() as RenderBox?;
+    final stackBox = stackCtx.findRenderObject() as RenderBox?;
+    if (gridBox == null || !gridBox.hasSize || stackBox == null || !stackBox.hasSize) return;
 
-    // Lift piece above finger so it remains visible
-    final liftedGlobal = globalPos - const Offset(0, 64);
-    final local = box.globalToLocal(liftedGlobal);
-    final cellPx = box.size.width / _gridSize;
+    // Exact inner grid cell size & stride
+    final innerSize = gridBox.size.width - _boardPadding * 2;
+    final cellPx = (innerSize - _gridSpacing * (_gridSize - 1)) / _gridSize;
+    final stride = cellPx + _gridSpacing;
 
-    final col = ((local.dx - (piece.width * cellPx) / 2) / cellPx).round();
-    final row = ((local.dy - (piece.height * cellPx) / 2) / cellPx).round();
+    // Lift piece above finger so it remains clearly visible
+    final liftedGlobal = globalPos - const Offset(0, _fingerLiftY);
+
+    // Convert lifted pointer to BOTH grid-local and stack-local coordinates
+    final gridLocal = gridBox.globalToLocal(liftedGlobal);
+    final stackLocal = stackBox.globalToLocal(liftedGlobal);
+
+    final pieceW = piece.width * cellPx + (piece.width - 1) * _gridSpacing;
+    final pieceH = piece.height * cellPx + (piece.height - 1) * _gridSpacing;
+
+    final col = ((gridLocal.dx - _boardPadding - pieceW / 2) / stride).round();
+    final row = ((gridLocal.dy - _boardPadding - pieceH / 2) / stride).round();
+
+    final valid = _canPlace(piece, row, col);
+    final nearBoard = row >= -1 && row < _gridSize && col >= -1 && col < _gridSize;
+
+    // When valid, gently snap floating piece center to the exact ghost cell center
+    Offset finalStackPos = stackLocal;
+    if (nearBoard && valid) {
+      final snappedGridCenter = Offset(
+        _boardPadding + col * stride + pieceW / 2,
+        _boardPadding + row * stride + pieceH / 2,
+      );
+      final snappedGlobal = gridBox.localToGlobal(snappedGridCenter);
+      finalStackPos = stackBox.globalToLocal(snappedGlobal);
+    }
 
     setState(() {
-      _dragGlobalPos = liftedGlobal;
-      if (row >= -1 && row < _gridSize && col >= -1 && col < _gridSize) {
+      _dragCellPx = cellPx;
+      _dragStackPos = finalStackPos;
+      if (nearBoard) {
         _hoverRow = row;
         _hoverCol = col;
-        _hoverValid = _canPlace(piece, row, col);
+        _hoverValid = valid;
       } else {
         _hoverRow = null;
         _hoverCol = null;
@@ -205,7 +238,6 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
       _tray[idx] = null;
       int gained = piece.cells.length * 10;
 
-      // Check full rows & columns
       final fullRows = <int>[];
       final fullCols = <int>[];
       for (int r = 0; r < _gridSize; r++) {
@@ -246,7 +278,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
 
       setState(() {
         _dragIndex = null;
-        _dragGlobalPos = null;
+        _dragStackPos = null;
         _hoverRow = null;
         _hoverCol = null;
         _hoverValid = false;
@@ -261,7 +293,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
       HapticFeedback.selectionClick();
       setState(() {
         _dragIndex = null;
-        _dragGlobalPos = null;
+        _dragStackPos = null;
         _hoverRow = null;
         _hoverCol = null;
         _hoverValid = false;
@@ -271,6 +303,14 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final draggedPiece = _dragIndex != null ? _tray[_dragIndex!] : null;
+    final draggedW = draggedPiece == null
+        ? 0.0
+        : draggedPiece.width * _dragCellPx + (draggedPiece.width - 1) * _gridSpacing;
+    final draggedH = draggedPiece == null
+        ? 0.0
+        : draggedPiece.height * _dragCellPx + (draggedPiece.height - 1) * _gridSpacing;
+
     return Scaffold(
       backgroundColor: const Color(0xFF070814),
       appBar: AppBar(
@@ -290,6 +330,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
         ],
       ),
       body: Stack(
+        key: _stackKey,
         children: [
           SafeArea(
             child: Padding(
@@ -341,7 +382,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                         aspectRatio: 1,
                         child: Container(
                           key: _gridKey,
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.all(_boardPadding),
                           decoration: BoxDecoration(
                             color: const Color(0xFF0E1226),
                             borderRadius: BorderRadius.circular(18),
@@ -358,27 +399,25 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                             itemCount: _gridSize * _gridSize,
                             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: _gridSize,
-                              crossAxisSpacing: 4,
-                              mainAxisSpacing: 4,
+                              crossAxisSpacing: _gridSpacing,
+                              mainAxisSpacing: _gridSpacing,
                             ),
                             itemBuilder: (_, idx) {
                               final r = idx ~/ _gridSize;
                               final c = idx % _gridSize;
                               final cellColor = _board[r][c];
                               final isPreview = _isPreviewCell(r, c);
-                              final previewColor = _dragIndex != null && _tray[_dragIndex!] != null
-                                  ? _tray[_dragIndex!]!.color
-                                  : Colors.white;
+                              final previewColor = draggedPiece?.color ?? Colors.white;
 
                               return AnimatedContainer(
-                                duration: const Duration(milliseconds: 110),
+                                duration: const Duration(milliseconds: 90),
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(6),
                                   color: cellColor ??
                                       (isPreview
                                           ? (_hoverValid
-                                              ? previewColor.withValues(alpha: 0.48)
-                                              : const Color(0xFFFF2D78).withValues(alpha: 0.35))
+                                              ? previewColor.withValues(alpha: 0.36)
+                                              : const Color(0xFFFF2D78).withValues(alpha: 0.28))
                                           : const Color(0xFF171C36)),
                                   border: Border.all(
                                     color: cellColor != null
@@ -386,7 +425,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                                         : isPreview
                                             ? (_hoverValid ? previewColor : const Color(0xFFFF2D78))
                                             : const Color(0xFF23294D),
-                                    width: 1,
+                                    width: isPreview ? 1.5 : 1,
                                   ),
                                 ),
                               );
@@ -422,7 +461,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                                 opacity: hidden ? 0.12 : 1.0,
                                 child: piece == null
                                     ? const SizedBox.shrink()
-                                    : _PiecePreview(piece: piece, cellSize: 19),
+                                    : _PiecePreview(piece: piece, cellSize: 19, gap: 2.5),
                               ),
                             ),
                           ),
@@ -434,12 +473,19 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
               ),
             ),
           ),
-          if (_dragIndex != null && _dragGlobalPos != null && _tray[_dragIndex!] != null)
+          if (draggedPiece != null && _dragStackPos != null)
             Positioned(
-              left: _dragGlobalPos!.dx - (_tray[_dragIndex!]!.width * 30) / 2,
-              top: _dragGlobalPos!.dy - (_tray[_dragIndex!]!.height * 30) / 2,
+              left: _dragStackPos!.dx - draggedW / 2,
+              top: _dragStackPos!.dy - draggedH / 2,
               child: IgnorePointer(
-                child: _PiecePreview(piece: _tray[_dragIndex!]!, cellSize: 28),
+                child: Opacity(
+                  opacity: _hoverValid ? 0.94 : 0.78,
+                  child: _PiecePreview(
+                    piece: draggedPiece,
+                    cellSize: _dragCellPx,
+                    gap: _gridSpacing,
+                  ),
+                ),
               ),
             ),
           if (_gameOver)
@@ -534,13 +580,17 @@ class _ScorePill extends StatelessWidget {
 }
 
 class _PiecePreview extends StatelessWidget {
-  const _PiecePreview({required this.piece, required this.cellSize});
+  const _PiecePreview({
+    required this.piece,
+    required this.cellSize,
+    required this.gap,
+  });
   final _BlockPiece piece;
   final double cellSize;
+  final double gap;
 
   @override
   Widget build(BuildContext context) {
-    const gap = 2.5;
     final w = piece.width * cellSize + (piece.width - 1) * gap;
     final h = piece.height * cellSize + (piece.height - 1) * gap;
     return SizedBox(
@@ -557,10 +607,10 @@ class _PiecePreview extends StatelessWidget {
               child: Container(
                 decoration: BoxDecoration(
                   color: piece.color,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.45), width: 1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.55), width: 1.2),
                   boxShadow: [
-                    BoxShadow(color: piece.color.withValues(alpha: 0.35), blurRadius: 6),
+                    BoxShadow(color: piece.color.withValues(alpha: 0.45), blurRadius: 8),
                   ],
                 ),
               ),

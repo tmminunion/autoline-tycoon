@@ -37,6 +37,9 @@ class GameTileArtwork extends StatelessWidget {
     if (keyId.contains('fruit-merge') || keyId.contains('suika')) {
       return 'assets/games/fruit_merge.webp';
     }
+    if (keyId.contains('fruit-slice') || keyId.contains('slice')) {
+      return 'assets/games/fruit_slice.webp';
+    }
     if (keyId.contains('karambol') || keyId.contains('carrom')) {
       return 'assets/games/karambol_ori.webp';
     }
@@ -45,6 +48,27 @@ class GameTileArtwork extends StatelessWidget {
     }
     if (keyId.contains('gaple') || keyId.contains('domino')) {
       return 'assets/games/gaple_ori.webp';
+    }
+    if (keyId.contains('jungle')) {
+      return 'assets/games/jungle_dash.webp';
+    }
+    if (keyId.contains('hero-blaze') || keyId.contains('blaze')) {
+      return 'assets/games/hero_blaze.webp';
+    }
+    if (keyId.contains('flappy') || keyId.contains('drone')) {
+      return 'assets/games/flappy_drone.webp';
+    }
+    if (keyId.contains('minesweeper') || keyId.contains('mine')) {
+      return 'assets/games/minesweeper.webp';
+    }
+    if (keyId.contains('connect-4') || keyId.contains('connect4')) {
+      return 'assets/games/connect_4.webp';
+    }
+    if (keyId.contains('pong')) {
+      return 'assets/games/pong_neon.webp';
+    }
+    if (keyId.contains('wordle')) {
+      return 'assets/games/wordle_id.webp';
     }
     if (keyId.contains('block')) {
       return 'assets/games/neon_block.webp';
