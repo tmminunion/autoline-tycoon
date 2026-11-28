@@ -12,6 +12,7 @@ class RemoteWebGame {
     required this.description,
     required this.url,
     required this.accentHex,
+    this.emoji = '🎮',
     this.tags = const ['WebView'],
     this.active = true,
   });
@@ -22,6 +23,7 @@ class RemoteWebGame {
   final String description;
   final String url;
   final String accentHex;
+  final String emoji;
   final List<String> tags;
   final bool active;
 
@@ -43,6 +45,7 @@ class RemoteWebGame {
       description: '${j['description'] ?? ''}'.trim(),
       url: '${j['url'] ?? ''}'.trim(),
       accentHex: '${j['accent'] ?? '#C084FC'}'.trim(),
+      emoji: '${j['emoji'] ?? '🎮'}'.trim().isEmpty ? '🎮' : '${j['emoji'] ?? '🎮'}'.trim(),
       tags: tags.isEmpty ? const ['WebView'] : tags,
       active: j['active'] == null ? true : (j['active'] == true || j['active'] == 1),
     );
@@ -55,6 +58,7 @@ class RemoteWebGame {
         'description': description,
         'url': url,
         'accent': accentHex,
+        'emoji': emoji,
         'tags': tags,
         'active': active,
       };
@@ -77,6 +81,7 @@ class RemoteGamesService {
           'Tap tepat waktu untuk menumpuk blok neon setinggi mungkin. Perfect combo memperlebar blok & skor berlipat!',
       url: 'https://nufat.id/games/neon-stack/',
       accentHex: '#C084FC',
+      emoji: '🗼',
       tags: ['WebView', '1-Tap', 'Combo'],
     ),
   ];

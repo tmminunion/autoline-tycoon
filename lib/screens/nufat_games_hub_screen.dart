@@ -16,6 +16,7 @@ class _HubGameItem {
     required this.isNative,
     required this.colors,
     required this.icon,
+    this.emoji,
     required this.bestScore,
     required this.onTap,
   });
@@ -26,6 +27,7 @@ class _HubGameItem {
   final bool isNative;
   final List<Color> colors;
   final IconData icon;
+  final String? emoji;
   final int bestScore;
   final VoidCallback onTap;
 }
@@ -140,8 +142,9 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
           title: g.title,
           subtitle: best > 0 ? 'Best $best' : g.genre,
           isNative: false,
-          colors: cloudPalettes[i % cloudPalettes.length],
+          colors: [g.accentColor, Color.lerp(g.accentColor, const Color(0xFF0F172A), 0.35)!],
           icon: Icons.layers_rounded,
+          emoji: g.emoji,
           bestScore: best,
           onTap: () => _openGame(WebGamePlayerScreen(game: g)),
         ),
@@ -389,7 +392,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                                   ),
                                   child: Stack(
                                     children: [
-                                      Center(child: Icon(g.icon, color: Colors.white, size: 38)),
+                                      Center(child: g.emoji != null ? Text(g.emoji!, style: const TextStyle(fontSize: 38)) : Icon(g.icon, color: Colors.white, size: 38)),
                                       Positioned(
                                         top: 6,
                                         left: 6,
@@ -523,7 +526,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                     gradient: LinearGradient(colors: g.colors),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(g.icon, color: Colors.white, size: 22),
+                  child: Center(child: g.emoji != null ? Text(g.emoji!, style: const TextStyle(fontSize: 22)) : Icon(g.icon, color: Colors.white, size: 22)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -689,7 +692,7 @@ class _SquareGameTile extends StatelessWidget {
               ),
               child: Stack(
                 children: [
-                  Center(child: Icon(item.icon, color: Colors.white, size: 42)),
+                  Center(child: item.emoji != null ? Text(item.emoji!, style: const TextStyle(fontSize: 42)) : Icon(item.icon, color: Colors.white, size: 42)),
                   Positioned(
                     top: 7,
                     left: 7,
