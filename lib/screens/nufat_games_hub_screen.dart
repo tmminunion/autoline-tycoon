@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../games/chess/chess_screen.dart';
+import '../games/neon_block/block_screen.dart';
 import '../games/neon_dash/dash_screen.dart';
 import '../services/remote_games_service.dart';
 import '../widgets/game_tile_artwork.dart';
@@ -64,6 +65,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
   int _strikerBest = 0;
   int _dashBest = 0;
   int _chessBest = 0;
+  int _blockBest = 0;
   List<RemoteWebGame> _remoteGames = RemoteGamesService.fallbackGames;
   Map<String, int> _webBests = const {};
   bool _remoteFromServer = false;
@@ -95,6 +97,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         _strikerBest = prefs.getInt('ns_best_score') ?? 0;
         _dashBest = prefs.getInt('nufat_dash_best_v1') ?? 0;
         _chessBest = prefs.getInt('nufat_chess_best_v1') ?? 0;
+        _blockBest = prefs.getInt('nufat_block_best_v1') ?? 0;
         _webBests = webBests;
       });
     } catch (_) {}
@@ -167,6 +170,17 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         emoji: '♟️',
         bestScore: _chessBest,
         onTap: () => _openGame(const ChessScreen()),
+      ),
+      _HubGameItem(
+        id: 'neon-block',
+        title: 'NEON BLOCK',
+        subtitle: _blockBest > 0 ? 'Best $_blockBest' : 'Block Puzzle 8x8',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFF00F5FF), Color(0xFF7B2FFF)],
+        icon: Icons.grid_view_rounded,
+        bestScore: _blockBest,
+        onTap: () => _openGame(const NeonBlockScreen()),
       ),
     ];
 

@@ -22,6 +22,9 @@ class GameTileArtwork extends StatelessWidget {
     final keyId = id.toLowerCase();
     final cat = category.toLowerCase();
 
+    if (keyId.contains('block')) {
+      return 'assets/games/neon_block.webp';
+    }
     if (keyId.contains('striker') || keyId.contains('space') || keyId.contains('shooter')) {
       return 'assets/games/neon_striker.webp';
     }
