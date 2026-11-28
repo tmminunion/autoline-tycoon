@@ -1,4 +1,4 @@
-name: Build Nufat Games Android APK
+name: Build Nufat Games Android APK & AAB
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: build-neon-striker-apk-${{ github.event_name }}
+  group: build-nufat-games-apk-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build-apk:
-    name: Analyze, Test & Build Nufat Games Release APK
+    name: Analyze, Test & Build Nufat Games Release APK & AAB
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -84,7 +84,72 @@ jobs:
       - name: Run Unit Tests
         run: flutter test
 
-      - name: Build Release APK
+      - name: Configure Release Signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 not set; skipping release signing."
+            exit 0
+          fi
+
+          echo "$KEYSTORE_B64" | base64 -d > android/app/upload-keystore.jks
+          cat <<EOF > android/key.properties
+          storePassword=$STORE_PASS
+          keyPassword=$KEY_PASS
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+          python3 - <<'PYEOF'
+          import os, re
+
+          kts_path = "android/app/build.gradle.kts"
+          groovy_path = "android/app/build.gradle"
+
+          if os.path.exists(kts_path):
+              txt = open(kts_path, "r", encoding="utf-8").read()
+              header = (
+                  "import java.util.Properties\n"
+                  "import java.io.FileInputStream\n\n"
+                  "val keystoreProperties = Properties()\n"
+                  "val keystorePropertiesFile = rootProject.file(\"key.properties\")\n"
+                  "if (keystorePropertiesFile.exists()) {\n"
+                  "    keystoreProperties.load(FileInputStream(keystorePropertiesFile))\n"
+                  "}\n\n"
+              )
+              if "keystorePropertiesFile" not in txt:
+                  txt = header + txt
+              signing_block = (
+                  "    signingConfigs {\n"
+                  "        create(\"release\") {\n"
+                  "            keyAlias = keystoreProperties.getProperty(\"keyAlias\")\n"
+                  "            keyPassword = keystoreProperties.getProperty(\"keyPassword\")\n"
+                  "            storeFile = keystoreProperties.getProperty(\"storeFile\")?.let { file(it) }\n"
+                  "            storePassword = keystoreProperties.getProperty(\"storePassword\")\n"
+                  "        }\n"
+                  "    }\n\n"
+                  "    buildTypes {"
+              )
+              if 'create("release")' not in txt:
+                  txt = txt.replace("    buildTypes {", signing_block, 1)
+              txt = txt.replace(
+                  'signingConfig = signingConfigs.getByName("debug")',
+                  'signingConfig = signingConfigs.getByName("release")'
+              )
+              open(kts_path, "w", encoding="utf-8").write(txt)
+              print("Configured release signing in build.gradle.kts")
+          elif os.path.exists(groovy_path):
+              txt = open(groovy_path, "r", encoding="utf-8").read()
+              txt = re.sub(r'signingConfig\s+signingConfigs\.debug', 'signingConfig signingConfigs.release', txt)
+              open(groovy_path, "w", encoding="utf-8").write(txt)
+              print("Configured release signing in build.gradle")
+          PYEOF
+
+      - name: Build Signed Release APK & AAB
         env:
           GRADLE_OPTS: -Dorg.gradle.internal.http.retry.maxRetries=5 -Dorg.gradle.internal.http.retry.initialBackoff=3000
         run: |
@@ -95,11 +160,16 @@ jobs:
               break
             fi
             if [ "$attempt" -eq 3 ]; then exit 1; fi
-            echo "Retrying APK build after transient network/Maven error (attempt $attempt)..."
             sleep 10
           done
           cp build/app/outputs/flutter-apk/app-release.apk \
             "Nufat-Games-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk"
+
+          flutter build appbundle --release \
+            --build-name="${{ steps.meta.outputs.version_name }}" \
+            --build-number="${{ steps.meta.outputs.version_code }}"
+          cp build/app/outputs/bundle/release/app-release.aab \
+            "Nufat-Games-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.aab"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -107,9 +177,10 @@ jobs:
           tag_name: v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}
           name: Nufat Games v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }})
           body: |
-            Build otomatis Android Release APK untuk **Nufat Games (Neon Striker + Neon Dash)** (`v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}`).
-            Unduh file `.apk` di bawah untuk langsung install di perangkat Android.
-          files: Nufat-Games-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk
+            Build otomatis Android Release APK & AAB untuk **Nufat Games (`nufat.id.games`)** (`v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}`).
+          files: |
+            Nufat-Games-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk
+            Nufat-Games-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.aab
           make_latest: true
 
       - name: Send APK Link to Telegram
@@ -121,15 +192,14 @@ jobs:
           RELEASE_URL: "https://github.com/${{ github.repository }}/releases/tag/v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}"
         run: |
           if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
-            echo "Secret Telegram belum diset; melewati notifikasi."
             exit 0
           fi
 
           if [ -f "$APK_FILE" ]; then
             APK_MB=$(awk "BEGIN {printf \"%.2f\", $(wc -c < "$APK_FILE")/1048576}")
-            MSG=$(printf "🚀 Nufat Games v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) berhasil dibuild!\n📱 APK: %s (%s MB)\n📥 Release: %s" "${APK_FILE}" "${APK_MB}" "${RELEASE_URL}")
+            MSG=$(printf "🚀 Nufat Games v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) berhasil dibuild (APK + AAB)!\n📱 APK: %s (%s MB)\n📥 Release: %s" "${APK_FILE}" "${APK_MB}" "${RELEASE_URL}")
           else
-            MSG="❌ Build Nufat Games v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) gagal menghasilkan file APK."
+            MSG="❌ Build Nufat Games v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) gagal."
           fi
 
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
@@ -142,7 +212,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          rm -rf build android /tmp/autoline_tpl *.apk
+          rm -rf build android /tmp/autoline_tpl *.apk *.aab
           ARTIFACT_IDS=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" --jq '.artifacts[].id' 2>/dev/null || true)
           for AID in $ARTIFACT_IDS; do
             gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/${AID}" >/dev/null 2>&1 || true
