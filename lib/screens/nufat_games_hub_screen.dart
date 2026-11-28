@@ -620,9 +620,23 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Nufat Games', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
-              const SizedBox(height: 4),
-              const Text('Package: nufat.id.games', style: TextStyle(fontSize: 12.5, color: Color(0xFF6B7280), fontWeight: FontWeight.w600)),
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.asset('assets/icon/app_icon.png', width: 52, height: 52, fit: BoxFit.cover),
+                  ),
+                  const SizedBox(width: 12),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Nufat Games', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF111827))),
+                      SizedBox(height: 2),
+                      Text('Package: nufat.id.games', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ],
+              ),
               const SizedBox(height: 12),
               Text(
                 'Total koleksi aktif: ${allItems.length} game (2 Ori Native + ${_remoteGames.length} Cloud WebView).',
