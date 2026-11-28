@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../games/chess/chess_screen.dart';
 import '../games/neon_dash/dash_screen.dart';
 import '../services/remote_games_service.dart';
+import '../widgets/game_tile_artwork.dart';
 import 'arcade_screen.dart';
 import 'web_game_player_screen.dart';
 
@@ -423,29 +424,22 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                           child: Column(
                             children: [
                               Expanded(
-                                child: Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
+                                child: Stack(
+                                  children: [
+                                    GameTileArtwork(
+                                      id: g.id,
+                                      category: g.category,
                                       colors: g.colors,
+                                      icon: g.icon,
+                                      emoji: g.emoji,
+                                      compact: true,
                                     ),
-                                  ),
-                                  child: Stack(
-                                    children: [
-                                      Center(
-                                        child: g.emoji != null
-                                            ? Text(g.emoji!, style: const TextStyle(fontSize: 38))
-                                            : Icon(g.icon, color: Colors.white, size: 38),
-                                      ),
-                                      Positioned(
-                                        top: 6,
-                                        left: 6,
-                                        child: _CornerBadge(isNative: g.isNative),
-                                      ),
-                                    ],
-                                  ),
+                                    Positioned(
+                                      top: 6,
+                                      left: 6,
+                                      child: _CornerBadge(isNative: g.isNative),
+                                    ),
+                                  ],
                                 ),
                               ),
                               Padding(
@@ -758,26 +752,24 @@ class _SquareGameTile extends StatelessWidget {
             aspectRatio: 1,
             child: Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: item.colors,
-                ),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: item.colors.first.withValues(alpha: 0.28),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    color: item.colors.first.withValues(alpha: 0.30),
+                    blurRadius: 12,
+                    offset: const Offset(0, 5),
                   ),
                 ],
               ),
+              clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                  Center(
-                    child: item.emoji != null
-                        ? Text(item.emoji!, style: const TextStyle(fontSize: 42))
-                        : Icon(item.icon, color: Colors.white, size: 42),
+                  GameTileArtwork(
+                    id: item.id,
+                    category: item.category,
+                    colors: item.colors,
+                    icon: item.icon,
+                    emoji: item.emoji,
                   ),
                   Positioned(
                     top: 7,
