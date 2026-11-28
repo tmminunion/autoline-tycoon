@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../services/sound_service.dart';
 
 class _BlockPiece {
   const _BlockPiece(this.cells, this.color);
@@ -35,18 +38,19 @@ class NeonBlockScreen extends StatefulWidget {
 
 class _NeonBlockScreenState extends State<NeonBlockScreen> {
   static const int _gridSize = 8;
-  static const double _boardPadding = 6.0;
-  static const double _gridSpacing = 4.0;
-  static const double _fingerLiftY = 72.0;
+  static const double _boardPadding = 7.0;
+  static const double _gridSpacing = 4.5;
+  static const double _fingerLiftY = 74.0;
   static const String _bestKey = 'nufat_block_best_v1';
 
+  // Vibrant 3D Neon Glass palette inspired by modern crystal neon blocks
   static const List<Color> _palette = [
-    Color(0xFF00F5FF), // cyan
-    Color(0xFFFF2D78), // pink
-    Color(0xFFFFD43B), // amber
-    Color(0xFF39FF14), // neon green
-    Color(0xFFA855F7), // purple
-    Color(0xFFFF6B35), // orange
+    Color(0xFF00E5FF), // electric cyan
+    Color(0xFF3B82F6), // royal neon blue
+    Color(0xFFE024FF), // neon magenta
+    Color(0xFFFFB800), // luminous amber
+    Color(0xFF10F587), // neon emerald
+    Color(0xFFFF3B6B), // neon coral rose
   ];
 
   static final List<List<Offset>> _shapes = [
@@ -74,6 +78,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
   final Random _rng = Random();
   final GlobalKey _gridKey = GlobalKey();
   final GlobalKey _stackKey = GlobalKey();
+  final SoundService _sfx = SoundService();
 
   late List<List<Color?>> _board;
   late List<_BlockPiece?> _tray;
@@ -81,19 +86,33 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
   int _bestScore = 0;
   int _combo = 0;
   bool _gameOver = false;
+  bool _muted = false;
 
+  // Drag & snap state
   int? _dragIndex;
-  Offset? _dragStackPos; // Local coordinates inside _stackKey (matches Positioned!)
-  double _dragCellPx = 32.0; // Exact board cell size so floating block matches shadow 1:1
+  Offset? _dragStackPos;
+  double _dragCellPx = 34.0;
   int? _hoverRow;
   int? _hoverCol;
   bool _hoverValid = false;
+
+  // Line-clear hold & burst animation state
+  bool _isClearing = false;
+  Set<int> _clearingCells = <int>{};
+  int _clearingPhase = 0; // 0 = none, 1 = hold & glow pulse, 2 = shrink & fade out
+  String? _clearBannerText;
 
   @override
   void initState() {
     super.initState();
     _initGame();
     _loadBest();
+  }
+
+  @override
+  void dispose() {
+    _sfx.dispose();
+    super.dispose();
   }
 
   Future<void> _loadBest() async {
@@ -123,7 +142,18 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
     _hoverRow = null;
     _hoverCol = null;
     _hoverValid = false;
+    _isClearing = false;
+    _clearingCells = <int>{};
+    _clearingPhase = 0;
+    _clearBannerText = null;
     _refillTray();
+  }
+
+  void _toggleMute() {
+    setState(() {
+      _muted = !_muted;
+      _sfx.isMuted = _muted;
+    });
   }
 
   void _refillTray() {
@@ -161,13 +191,58 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
     if (_tray.every((e) => e == null)) return;
     if (!_anyMoveAvailable()) {
       setState(() => _gameOver = true);
-      HapticFeedback.heavyImpact();
+      _sfx.playExplosion(heavy: true);
       _saveBest(_score);
     }
   }
 
+  /// Computes cells that would clear if the currently hovered valid piece is dropped.
+  Set<int> _computeWillClearPreview() {
+    if (_dragIndex == null || !_hoverValid || _hoverRow == null || _hoverCol == null) {
+      return const <int>{};
+    }
+    final piece = _tray[_dragIndex!];
+    if (piece == null) return const <int>{};
+
+    final placed = <int>{};
+    for (final o in piece.cells) {
+      placed.add((_hoverRow! + o.dy.toInt()) * _gridSize + (_hoverCol! + o.dx.toInt()));
+    }
+
+    final result = <int>{};
+    for (int r = 0; r < _gridSize; r++) {
+      bool full = true;
+      for (int c = 0; c < _gridSize; c++) {
+        if (_board[r][c] == null && !placed.contains(r * _gridSize + c)) {
+          full = false;
+          break;
+        }
+      }
+      if (full) {
+        for (int c = 0; c < _gridSize; c++) {
+          result.add(r * _gridSize + c);
+        }
+      }
+    }
+    for (int c = 0; c < _gridSize; c++) {
+      bool full = true;
+      for (int r = 0; r < _gridSize; r++) {
+        if (_board[r][c] == null && !placed.contains(r * _gridSize + c)) {
+          full = false;
+          break;
+        }
+      }
+      if (full) {
+        for (int r = 0; r < _gridSize; r++) {
+          result.add(r * _gridSize + c);
+        }
+      }
+    }
+    return result;
+  }
+
   void _updateHover(Offset globalPos) {
-    if (_dragIndex == null) return;
+    if (_dragIndex == null || _isClearing) return;
     final piece = _tray[_dragIndex!];
     if (piece == null) return;
 
@@ -178,15 +253,11 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
     final stackBox = stackCtx.findRenderObject() as RenderBox?;
     if (gridBox == null || !gridBox.hasSize || stackBox == null || !stackBox.hasSize) return;
 
-    // Exact inner grid cell size & stride
     final innerSize = gridBox.size.width - _boardPadding * 2;
     final cellPx = (innerSize - _gridSpacing * (_gridSize - 1)) / _gridSize;
     final stride = cellPx + _gridSpacing;
 
-    // Lift piece above finger so it remains clearly visible
     final liftedGlobal = globalPos - const Offset(0, _fingerLiftY);
-
-    // Convert lifted pointer to BOTH grid-local and stack-local coordinates
     final gridLocal = gridBox.globalToLocal(liftedGlobal);
     final stackLocal = stackBox.globalToLocal(liftedGlobal);
 
@@ -199,7 +270,6 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
     final valid = _canPlace(piece, row, col);
     final nearBoard = row >= -1 && row < _gridSize && col >= -1 && col < _gridSize;
 
-    // When valid, gently snap floating piece center to the exact ghost cell center
     Offset finalStackPos = stackLocal;
     if (nearBoard && valid) {
       final snappedGridCenter = Offset(
@@ -225,7 +295,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
     });
   }
 
-  void _endDrag() {
+  Future<void> _endDrag() async {
     if (_dragIndex == null) return;
     final idx = _dragIndex!;
     final piece = _tray[idx];
@@ -236,8 +306,9 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
         _board[_hoverRow! + o.dy.toInt()][_hoverCol! + o.dx.toInt()] = piece.color;
       }
       _tray[idx] = null;
-      int gained = piece.cells.length * 10;
+      final placeScore = piece.cells.length * 10;
 
+      // Detect full rows & columns
       final fullRows = <int>[];
       final fullCols = <int>[];
       for (int r = 0; r < _gridSize; r++) {
@@ -257,32 +328,82 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
       final clearedLines = fullRows.length + fullCols.length;
       if (clearedLines > 0) {
         _combo++;
-        HapticFeedback.heavyImpact();
+        final bonus = clearedLines * 100 * _combo;
+        _score += placeScore + bonus;
+        if (_score > _bestScore) _saveBest(_score);
+
+        // Build set of cells to animate before removing
+        final targets = <int>{};
         for (final r in fullRows) {
           for (int c = 0; c < _gridSize; c++) {
-            _board[r][c] = null;
+            targets.add(r * _gridSize + c);
           }
         }
         for (final c in fullCols) {
           for (int r = 0; r < _gridSize; r++) {
-            _board[r][c] = null;
+            targets.add(r * _gridSize + c);
           }
         }
-        gained += clearedLines * 100 * _combo;
+
+        // Play rich clear SFX
+        if (clearedLines >= 2 || _combo >= 2) {
+          _sfx.playEmp();
+        } else {
+          _sfx.playPowerUp();
+        }
+
+        final label = clearedLines >= 2
+            ? '$clearedLines BARIS! +$bonus'
+            : (_combo >= 2 ? 'COMBO x$_combo! +$bonus' : 'CLEAR! +$bonus');
+
+        // Phase 1: HOLD & BRIGHT NEON FLASH so player clearly sees the completed line
+        setState(() {
+          _dragIndex = null;
+          _dragStackPos = null;
+          _hoverRow = null;
+          _hoverCol = null;
+          _hoverValid = false;
+          _isClearing = true;
+          _clearingCells = targets;
+          _clearingPhase = 1;
+          _clearBannerText = label;
+        });
+
+        await Future<void>.delayed(const Duration(milliseconds: 280));
+        if (!mounted) return;
+
+        // Phase 2: SMOOTH SHRINK & POP OUT
+        setState(() {
+          _clearingPhase = 2;
+        });
+
+        await Future<void>.delayed(const Duration(milliseconds: 240));
+        if (!mounted) return;
+
+        // Phase 3: Remove cleared cells & continue
+        for (final cellKey in targets) {
+          _board[cellKey ~/ _gridSize][cellKey % _gridSize] = null;
+        }
+        setState(() {
+          _isClearing = false;
+          _clearingCells = <int>{};
+          _clearingPhase = 0;
+          _clearBannerText = null;
+        });
       } else {
         _combo = 0;
+        _score += placeScore;
+        if (_score > _bestScore) _saveBest(_score);
+        _sfx.playCoin();
+
+        setState(() {
+          _dragIndex = null;
+          _dragStackPos = null;
+          _hoverRow = null;
+          _hoverCol = null;
+          _hoverValid = false;
+        });
       }
-
-      _score += gained;
-      if (_score > _bestScore) _saveBest(_score);
-
-      setState(() {
-        _dragIndex = null;
-        _dragStackPos = null;
-        _hoverRow = null;
-        _hoverCol = null;
-        _hoverValid = false;
-      });
 
       if (_tray.every((e) => e == null)) {
         _refillTray();
@@ -310,21 +431,48 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
     final draggedH = draggedPiece == null
         ? 0.0
         : draggedPiece.height * _dragCellPx + (draggedPiece.height - 1) * _gridSpacing;
+    final willClearCells = _computeWillClearPreview();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070814),
+      backgroundColor: const Color(0xFF060913),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0D1C),
+        backgroundColor: const Color(0xFF0A0F1F),
         foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'NEON BLOCK',
-          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 17),
+        title: Row(
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00E5FF), Color(0xFFE024FF)],
+                ),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: const Icon(Icons.grid_view_rounded, size: 15, color: Colors.white),
+            ),
+            const SizedBox(width: 9),
+            const Text(
+              'NEON BLOCK',
+              style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.4, fontSize: 16),
+            ),
+          ],
         ),
         actions: [
           IconButton(
+            tooltip: _muted ? 'Aktifkan Suara' : 'Matikan Suara',
+            onPressed: _toggleMute,
+            icon: Icon(
+              _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+              color: _muted ? Colors.white38 : const Color(0xFF00E5FF),
+              size: 21,
+            ),
+          ),
+          IconButton(
             tooltip: 'Ulangi',
-            onPressed: () => setState(_initGame),
+            onPressed: _isClearing ? null : () => setState(_initGame),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -332,112 +480,212 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
       body: Stack(
         key: _stackKey,
         children: [
+          // Clean subtle ambient studio backdrop
+          Container(
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.18),
+                radius: 1.05,
+                colors: [Color(0xFF101933), Color(0xFF060913)],
+              ),
+            ),
+          ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
               child: Column(
                 children: [
+                  // Clean Modern Glass Score Row
                   Row(
                     children: [
                       Expanded(
-                        child: _ScorePill(
+                        child: _ScoreCard(
                           label: 'SKOR',
                           value: '$_score',
-                          accent: const Color(0xFF00F5FF),
+                          accent: const Color(0xFF00E5FF),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: _ScorePill(
+                        child: _ScoreCard(
                           label: 'TERBAIK',
                           value: '$_bestScore',
-                          accent: const Color(0xFFFFD43B),
+                          accent: const Color(0xFFFFB800),
                         ),
                       ),
                     ],
                   ),
-                  if (_combo > 1) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFD43B).withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(99),
-                        border: Border.all(color: const Color(0xFFFFD43B)),
-                      ),
-                      child: Text(
-                        '${_combo}x COMBO STREAK!',
-                        style: const TextStyle(
-                          color: Color(0xFFFFD43B),
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
+
+                  // 8x8 3D Recessed Neon Board
                   Expanded(
                     child: Center(
-                      child: AspectRatio(
-                        aspectRatio: 1,
-                        child: Container(
-                          key: _gridKey,
-                          padding: const EdgeInsets.all(_boardPadding),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0E1226),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFF23294D), width: 1.6),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF00F5FF).withValues(alpha: 0.10),
-                                blurRadius: 24,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 1,
+                            child: Container(
+                              key: _gridKey,
+                              padding: const EdgeInsets.all(_boardPadding),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0xFF0F162B), Color(0xFF090D1C)],
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.12),
+                                  width: 1.4,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF00E5FF).withValues(alpha: 0.08),
+                                    blurRadius: 28,
+                                    spreadRadius: 1,
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.6),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: GridView.builder(
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _gridSize * _gridSize,
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: _gridSize,
-                              crossAxisSpacing: _gridSpacing,
-                              mainAxisSpacing: _gridSpacing,
-                            ),
-                            itemBuilder: (_, idx) {
-                              final r = idx ~/ _gridSize;
-                              final c = idx % _gridSize;
-                              final cellColor = _board[r][c];
-                              final isPreview = _isPreviewCell(r, c);
-                              final previewColor = draggedPiece?.color ?? Colors.white;
+                              child: GridView.builder(
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _gridSize * _gridSize,
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: _gridSize,
+                                  crossAxisSpacing: _gridSpacing,
+                                  mainAxisSpacing: _gridSpacing,
+                                ),
+                                itemBuilder: (_, idx) {
+                                  final r = idx ~/ _gridSize;
+                                  final c = idx % _gridSize;
+                                  final cellColor = _board[r][c];
+                                  final isPreview = _isPreviewCell(r, c);
+                                  final isClearingCell = _clearingCells.contains(idx);
+                                  final isWillClear = willClearCells.contains(idx);
+                                  final previewColor = draggedPiece?.color ?? Colors.white;
 
-                              return AnimatedContainer(
-                                duration: const Duration(milliseconds: 90),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(6),
-                                  color: cellColor ??
-                                      (isPreview
-                                          ? (_hoverValid
-                                              ? previewColor.withValues(alpha: 0.36)
-                                              : const Color(0xFFFF2D78).withValues(alpha: 0.28))
-                                          : const Color(0xFF171C36)),
-                                  border: Border.all(
-                                    color: cellColor != null
-                                        ? Colors.white.withValues(alpha: 0.35)
-                                        : isPreview
-                                            ? (_hoverValid ? previewColor : const Color(0xFFFF2D78))
-                                            : const Color(0xFF23294D),
-                                    width: isPreview ? 1.5 : 1,
+                                  if (cellColor != null) {
+                                    final double scale = isClearingCell
+                                        ? (_clearingPhase == 1 ? 1.12 : 0.0)
+                                        : 1.0;
+                                    final double opacity =
+                                        isClearingCell && _clearingPhase == 2 ? 0.0 : 1.0;
+
+                                    return AnimatedOpacity(
+                                      duration: const Duration(milliseconds: 210),
+                                      opacity: opacity,
+                                      child: AnimatedScale(
+                                        duration: const Duration(milliseconds: 210),
+                                        curve: _clearingPhase == 1
+                                            ? Curves.easeOutBack
+                                            : Curves.easeInBack,
+                                        scale: scale,
+                                        child: _Neon3DCube(
+                                          color: isClearingCell
+                                              ? Color.lerp(cellColor, Colors.white, 0.55)!
+                                              : cellColor,
+                                          highlighted: isClearingCell || isWillClear,
+                                        ),
+                                      ),
+                                    );
+                                  }
+
+                                  if (isPreview) {
+                                    return AnimatedContainer(
+                                      duration: const Duration(milliseconds: 80),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        color: _hoverValid
+                                            ? previewColor.withValues(alpha: 0.24)
+                                            : const Color(0xFFFF3B6B).withValues(alpha: 0.22),
+                                        border: Border.all(
+                                          color: _hoverValid
+                                              ? previewColor.withValues(alpha: 0.9)
+                                              : const Color(0xFFFF3B6B),
+                                          width: 1.6,
+                                        ),
+                                      ),
+                                    );
+                                  }
+
+                                  // Clean recessed empty socket
+                                  return Container(
+                                    decoration: BoxDecoration(
+                                      color: isWillClear
+                                          ? const Color(0xFFFFB800).withValues(alpha: 0.14)
+                                          : const Color(0xFF121A30),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: isWillClear
+                                            ? const Color(0xFFFFB800).withValues(alpha: 0.55)
+                                            : Colors.white.withValues(alpha: 0.055),
+                                        width: 1,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+
+                          // Floating Clear / Combo Banner during line-clear animation
+                          if (_clearBannerText != null)
+                            IgnorePointer(
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 180),
+                                opacity: _clearingPhase == 2 ? 0.0 : 1.0,
+                                child: AnimatedScale(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutBack,
+                                  scale: _clearingPhase == 1 ? 1.0 : 0.85,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFF00E5FF), Color(0xFF3B82F6)],
+                                      ),
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFF00E5FF).withValues(alpha: 0.55),
+                                          blurRadius: 18,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Text(
+                                      _clearBannerText!,
+                                      style: const TextStyle(
+                                        color: Color(0xFF060913),
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  SizedBox(
+
+                  const SizedBox(height: 14),
+
+                  // Clean Modern Glass Tray
+                  Container(
                     height: 108,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0C1224),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: List.generate(3, (i) {
@@ -446,10 +694,11 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                         return Expanded(
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onPanStart: piece == null
+                            onPanStart: (piece == null || _isClearing)
                                 ? null
                                 : (d) {
                                     HapticFeedback.selectionClick();
+                                    _sfx.playLaser();
                                     setState(() => _dragIndex = i);
                                     _updateHover(d.globalPosition);
                                   },
@@ -473,13 +722,15 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
               ),
             ),
           ),
+
+          // 1:1 Pixel-Aligned Floating 3D Piece
           if (draggedPiece != null && _dragStackPos != null)
             Positioned(
               left: _dragStackPos!.dx - draggedW / 2,
               top: _dragStackPos!.dy - draggedH / 2,
               child: IgnorePointer(
                 child: Opacity(
-                  opacity: _hoverValid ? 0.94 : 0.78,
+                  opacity: _hoverValid ? 0.96 : 0.82,
                   child: _PiecePreview(
                     piece: draggedPiece,
                     cellSize: _dragCellPx,
@@ -488,6 +739,7 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                 ),
               ),
             ),
+
           if (_gameOver)
             Container(
               color: Colors.black.withValues(alpha: 0.82),
@@ -496,9 +748,9 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                   margin: const EdgeInsets.all(28),
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10132A),
+                    color: const Color(0xFF0E152B),
                     borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: const Color(0xFF00F5FF).withValues(alpha: 0.45)),
+                    border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -506,8 +758,8 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                       const Text(
                         'GAME OVER',
                         style: TextStyle(
-                          color: Color(0xFFFF2D78),
-                          fontSize: 24,
+                          color: Color(0xFFFF3B6B),
+                          fontSize: 23,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 1.5,
                         ),
@@ -521,10 +773,10 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
                       const SizedBox(height: 18),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00F5FF),
-                          foregroundColor: const Color(0xFF070814),
+                          backgroundColor: const Color(0xFF00E5FF),
+                          foregroundColor: const Color(0xFF060913),
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: () => setState(_initGame),
                         icon: const Icon(Icons.replay_rounded),
@@ -553,8 +805,98 @@ class _NeonBlockScreenState extends State<NeonBlockScreen> {
   }
 }
 
-class _ScorePill extends StatelessWidget {
-  const _ScorePill({required this.label, required this.value, required this.accent});
+/// Glossy 3D Neon Glass Cube with top-left specular sheen, inner crystal depth & neon rim glow.
+class _Neon3DCube extends StatelessWidget {
+  const _Neon3DCube({
+    required this.color,
+    this.highlighted = false,
+  });
+
+  final Color color;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final lightTop = Color.lerp(color, Colors.white, 0.42)!;
+    final deepBottom = Color.lerp(color, const Color(0xFF040712), 0.52)!;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [lightTop, color, deepBottom],
+          stops: const [0.0, 0.48, 1.0],
+        ),
+        border: Border.all(
+          color: highlighted ? Colors.white : Color.lerp(color, Colors.white, 0.55)!,
+          width: highlighted ? 1.8 : 1.25,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: highlighted ? 0.85 : 0.42),
+            blurRadius: highlighted ? 14 : 7,
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 3,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6.5),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Inner crystal recessed glass face
+            Container(
+              margin: const EdgeInsets.all(2.2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(5),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.34),
+                    color.withValues(alpha: 0.12),
+                    Colors.black.withValues(alpha: 0.32),
+                  ],
+                ),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.22),
+                  width: 0.7,
+                ),
+              ),
+            ),
+            // Top-left glossy glass highlight glint
+            Positioned(
+              top: 2.5,
+              left: 3,
+              right: 8,
+              height: 4,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(99),
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.65),
+                      Colors.white.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScoreCard extends StatelessWidget {
+  const _ScoreCard({required this.label, required this.value, required this.accent});
   final String label;
   final String value;
   final Color accent;
@@ -564,15 +906,33 @@ class _ScorePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF10132A),
+        color: const Color(0xFF0C1224),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withValues(alpha: 0.35)),
+        border: Border.all(color: accent.withValues(alpha: 0.32)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w800)),
-          Text(value, style: TextStyle(color: accent, fontSize: 18, fontWeight: FontWeight.w900)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(color: accent, fontSize: 19, fontWeight: FontWeight.w900),
+          ),
         ],
       ),
     );
@@ -604,16 +964,7 @@ class _PiecePreview extends StatelessWidget {
               top: o.dy * (cellSize + gap),
               width: cellSize,
               height: cellSize,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: piece.color,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.55), width: 1.2),
-                  boxShadow: [
-                    BoxShadow(color: piece.color.withValues(alpha: 0.45), blurRadius: 8),
-                  ],
-                ),
-              ),
+              child: _Neon3DCube(color: piece.color),
             ),
         ],
       ),
