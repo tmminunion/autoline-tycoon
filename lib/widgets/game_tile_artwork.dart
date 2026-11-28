@@ -22,6 +22,9 @@ class GameTileArtwork extends StatelessWidget {
     final keyId = id.toLowerCase();
     final cat = category.toLowerCase();
 
+    if (keyId.contains('congklak') || keyId.contains('mancala') || keyId.contains('dakon')) {
+      return 'assets/games/congklak_ori.webp';
+    }
     if (keyId.contains('gaple') || keyId.contains('domino')) {
       return 'assets/games/gaple_ori.webp';
     }
