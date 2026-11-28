@@ -6,10 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _Orb {
-  _Orb({required this.x, required this.y, required this.tier, this.vx = 0, this.vy = 0});
+  _Orb({required this.x, required this.y, required this.tier, this.vy = 0});
   double x;
   double y;
-  double vx;
+  double vx = 0;
   double vy;
   int tier;
   double age = 0;

@@ -6,9 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _DamPiece {
-  _DamPiece({required this.isPlayer, this.isKing = false});
+  _DamPiece({required this.isPlayer});
   final bool isPlayer;
-  bool isKing;
+  bool isKing = false;
 }
 
 class _DamMove {

@@ -6,11 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _Coin {
-  _Coin({required this.x, required this.y, required this.r, required this.kind, this.vx = 0, this.vy = 0});
+  _Coin({required this.x, required this.y, required this.r, required this.kind});
   double x;
   double y;
-  double vx;
-  double vy;
+  double vx = 0;
+  double vy = 0;
   final double r;
   final String kind; // 'striker' | 'queen' | 'white' | 'black'
   bool pocketed = false;
