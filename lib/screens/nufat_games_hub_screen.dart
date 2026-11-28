@@ -14,6 +14,7 @@ class _HubGameItem {
     required this.title,
     required this.subtitle,
     required this.isNative,
+    required this.category,
     required this.colors,
     required this.icon,
     this.emoji,
@@ -25,6 +26,7 @@ class _HubGameItem {
   final String title;
   final String subtitle;
   final bool isNative;
+  final String category; // Native | Arcade | Kuis | Puzzle | Kata | Refleks | Memory
   final List<Color> colors;
   final IconData icon;
   final String? emoji;
@@ -40,8 +42,20 @@ class NufatGamesHubScreen extends StatefulWidget {
 }
 
 class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
+  static const List<String> _categories = [
+    'Semua',
+    'Native',
+    'Arcade',
+    'Kuis',
+    'Puzzle',
+    'Kata',
+    'Refleks',
+    'Memory',
+  ];
+
   int _topTab = 1; // 0: Semua, 1: Game, 2: Native, 3: Cloud
   int _bottomTab = 0; // 0: Main, 1: Cloud, 3: Skor, 4: Aku
+  String _selectedCategory = 'Semua';
   bool _searching = false;
   final TextEditingController _searchCtrl = TextEditingController();
 
@@ -102,6 +116,18 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
     await _loadScores();
   }
 
+  String _resolveCategory(RemoteWebGame g) {
+    final hay = '${g.genre} ${g.tags.join(' ')} ${g.id}'.toLowerCase();
+    if (hay.contains('kuis') || hay.contains('quiz')) return 'Kuis';
+    if (hay.contains('memory') || hay.contains('mem-')) return 'Memory';
+    if (hay.contains('kata') || hay.contains('wordle') || hay.contains('scr-') || hay.contains('hng-')) return 'Kata';
+    if (hay.contains('puzzle') || hay.contains('sudoku') || hay.contains('board') || hay.contains('mine') || hay.contains('sliding') || hay.contains('connect')) {
+      return 'Puzzle';
+    }
+    if (hay.contains('refleks') || hay.contains('otak') || hay.contains('musik') || hay.contains('simon')) return 'Refleks';
+    return 'Arcade';
+  }
+
   List<_HubGameItem> _buildAllItems() {
     final items = <_HubGameItem>[
       _HubGameItem(
@@ -109,6 +135,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         title: 'NEON STRIKER',
         subtitle: _strikerBest > 0 ? 'Best $_strikerBest' : 'Arcade Shooter',
         isNative: true,
+        category: 'Native',
         colors: const [Color(0xFF00C6FF), Color(0xFF0072FF)],
         icon: Icons.rocket_launch_rounded,
         bestScore: _strikerBest,
@@ -119,6 +146,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         title: 'NEON DASH',
         subtitle: _dashBest > 0 ? 'Best $_dashBest' : 'Endless Runner',
         isNative: true,
+        category: 'Native',
         colors: const [Color(0xFFFFA726), Color(0xFFFF5722)],
         icon: Icons.bolt_rounded,
         bestScore: _dashBest,
@@ -135,6 +163,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
           title: g.title,
           subtitle: best > 0 ? 'Best $best' : g.genre,
           isNative: false,
+          category: _resolveCategory(g),
           colors: [g.accentColor, Color.lerp(g.accentColor, const Color(0xFF0F172A), 0.35)!],
           icon: Icons.layers_rounded,
           emoji: g.emoji,
@@ -160,7 +189,11 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
     final filtered = allItems.where((g) {
       if (_topTab == 2 && !g.isNative) return false;
       if (_topTab == 3 && g.isNative) return false;
-      if (q.isNotEmpty && !g.title.toLowerCase().contains(q) && !g.subtitle.toLowerCase().contains(q)) {
+      if (_selectedCategory != 'Semua' && g.category != _selectedCategory) return false;
+      if (q.isNotEmpty &&
+          !g.title.toLowerCase().contains(q) &&
+          !g.subtitle.toLowerCase().contains(q) &&
+          !g.category.toLowerCase().contains(q)) {
         return false;
       }
       return true;
@@ -200,7 +233,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                     autofocus: true,
                     style: const TextStyle(color: Color(0xFF111827), fontSize: 14, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
-                      hintText: 'Cari game di Nufat Games...',
+                      hintText: 'Cari dari 100+ game Nufat Games...',
                       hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
                       prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF6B7280)),
                       filled: true,
@@ -233,6 +266,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                       onTap: () => setState(() {
                         _topTab = i;
                         _bottomTab = 0;
+                        _selectedCategory = 'Semua';
                       }),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -271,14 +305,14 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
   }
 
   Widget _buildGamesHome(List<_HubGameItem> allItems, List<_HubGameItem> filtered) {
-    final cloudItems = allItems.where((e) => !e.isNative).toList();
+    final featuredItems = allItems.take(8).toList();
     return RefreshIndicator(
       color: const Color(0xFFFF8C42),
       onRefresh: _loadAll,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
         children: [
-          // Featured Orange Carousel Banner (inspired by clean modern arcade UI)
+          // Featured Orange Carousel Banner
           Container(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
             decoration: BoxDecoration(
@@ -337,7 +371,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              _remoteFromServer ? 'API Live ›' : 'Sync API ›',
+                              _remoteFromServer ? '${allItems.length} Game ›' : 'Sync API ›',
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
                             ),
                           ],
@@ -351,10 +385,10 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                   height: 128,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: allItems.length,
+                    itemCount: featuredItems.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 10),
                     itemBuilder: (_, idx) {
-                      final g = allItems[idx];
+                      final g = featuredItems[idx];
                       return GestureDetector(
                         onTap: g.onTap,
                         child: Container(
@@ -385,7 +419,11 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                                   ),
                                   child: Stack(
                                     children: [
-                                      Center(child: g.emoji != null ? Text(g.emoji!, style: const TextStyle(fontSize: 38)) : Icon(g.icon, color: Colors.white, size: 38)),
+                                      Center(
+                                        child: g.emoji != null
+                                            ? Text(g.emoji!, style: const TextStyle(fontSize: 38))
+                                            : Icon(g.icon, color: Colors.white, size: 38),
+                                      ),
                                       Positioned(
                                         top: 6,
                                         left: 6,
@@ -419,89 +457,108 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
             ),
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
 
-          // 3-Column Clean Square Tile Grid
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: filtered.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 14,
-              childAspectRatio: 0.76,
+          // Category Filter Chips (effortless browsing across 100+ games)
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _categories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (_, idx) {
+                final cat = _categories[idx];
+                final active = _selectedCategory == cat;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedCategory = cat),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: active ? const Color(0xFF111827) : Colors.white,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: active ? const Color(0xFF111827) : const Color(0xFFE5E7EB),
+                      ),
+                    ),
+                    child: Text(
+                      cat,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: active ? Colors.white : const Color(0xFF4B5563),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
-            itemBuilder: (_, idx) => _SquareGameTile(item: filtered[idx]),
           ),
 
-          if (cloudItems.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              Text(
+                _selectedCategory == 'Semua' ? 'SEMUA GAME' : 'KATEGORI $_selectedCategory'.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                  color: Color(0xFF6B7280),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'DIREKOMENDASIKAN NUFAT',
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF111827),
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        width: 24,
-                        height: 24,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFF3F4F6),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFF6B7280)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: cloudItems.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 0.76,
-                    ),
-                    itemBuilder: (_, idx) => _SquareGameTile(item: cloudItems[idx]),
-                  ),
-                ],
+              const Spacer(),
+              Text(
+                '${filtered.length} game',
+                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF9CA3AF)),
               ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // 3-Column Clean Square Tile Grid
+          if (filtered.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Text(
+                  'Tidak ada game yang cocok dengan pencarian.',
+                  style: TextStyle(color: Color(0xFF6B7280), fontWeight: FontWeight.w600),
+                ),
+              ),
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filtered.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 14,
+                childAspectRatio: 0.76,
+              ),
+              itemBuilder: (_, idx) => _SquareGameTile(item: filtered[idx]),
             ),
-          ],
         ],
       ),
     );
   }
 
   Widget _buildScoresView(List<_HubGameItem> allItems) {
+    final played = allItems.where((g) => g.bestScore > 0).toList()
+      ..sort((a, b) => b.bestScore.compareTo(a.bestScore));
+    final list = played.isNotEmpty ? played : allItems.take(10).toList();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text(
-          'Rekor Skor Terbaik',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF111827)),
+        Text(
+          played.isNotEmpty ? 'Rekor Skor Terbaik (${played.length} game)' : 'Rekor Skor Terbaik',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF111827)),
         ),
         const SizedBox(height: 12),
-        for (final g in allItems)
+        for (final g in list)
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),
@@ -519,7 +576,11 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                     gradient: LinearGradient(colors: g.colors),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Center(child: g.emoji != null ? Text(g.emoji!, style: const TextStyle(fontSize: 22)) : Icon(g.icon, color: Colors.white, size: 22)),
+                  child: Center(
+                    child: g.emoji != null
+                        ? Text(g.emoji!, style: const TextStyle(fontSize: 22))
+                        : Icon(g.icon, color: Colors.white, size: 22),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -528,7 +589,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                     children: [
                       Text(g.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF111827))),
                       Text(
-                        g.isNative ? 'Ori Native · Offline' : 'Cloud WebView · API',
+                        g.isNative ? 'Ori Native · Offline' : '${g.category} · Cloud WebView',
                         style: const TextStyle(fontSize: 11.5, color: Color(0xFF6B7280)),
                       ),
                     ],
@@ -614,7 +675,6 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
                 _topTab = 3;
               }),
             ),
-            // Center Yellow Quick Play Pill (matching reference UI)
             GestureDetector(
               onTap: _quickPlayRandom,
               child: Container(
@@ -685,7 +745,11 @@ class _SquareGameTile extends StatelessWidget {
               ),
               child: Stack(
                 children: [
-                  Center(child: item.emoji != null ? Text(item.emoji!, style: const TextStyle(fontSize: 42)) : Icon(item.icon, color: Colors.white, size: 42)),
+                  Center(
+                    child: item.emoji != null
+                        ? Text(item.emoji!, style: const TextStyle(fontSize: 42))
+                        : Icon(item.icon, color: Colors.white, size: 42),
+                  ),
                   Positioned(
                     top: 7,
                     left: 7,
