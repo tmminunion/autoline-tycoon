@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../games/chess/chess_screen.dart';
 import '../games/neon_dash/dash_screen.dart';
 import '../services/remote_games_service.dart';
 import 'arcade_screen.dart';
@@ -61,6 +62,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
 
   int _strikerBest = 0;
   int _dashBest = 0;
+  int _chessBest = 0;
   List<RemoteWebGame> _remoteGames = RemoteGamesService.fallbackGames;
   Map<String, int> _webBests = const {};
   bool _remoteFromServer = false;
@@ -91,6 +93,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
       setState(() {
         _strikerBest = prefs.getInt('ns_best_score') ?? 0;
         _dashBest = prefs.getInt('nufat_dash_best_v1') ?? 0;
+        _chessBest = prefs.getInt('nufat_chess_best_v1') ?? 0;
         _webBests = webBests;
       });
     } catch (_) {}
@@ -151,6 +154,18 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         icon: Icons.bolt_rounded,
         bestScore: _dashBest,
         onTap: () => _openGame(const DashScreen()),
+      ),
+      _HubGameItem(
+        id: 'catur-ori',
+        title: 'CATUR ORI',
+        subtitle: _chessBest > 0 ? 'Best $_chessBest' : 'Catur Offline AI',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFFE8C46A), Color(0xFF92400E)],
+        icon: Icons.grid_on_rounded,
+        emoji: '♟️',
+        bestScore: _chessBest,
+        onTap: () => _openGame(const ChessScreen()),
       ),
     ];
 
@@ -639,7 +654,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Total koleksi aktif: ${allItems.length} game (2 Ori Native + ${_remoteGames.length} Cloud WebView).',
+                'Total koleksi aktif: ${allItems.length} game (3 Ori Native + ${_remoteGames.length} Cloud WebView).',
                 style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
               ),
               const SizedBox(height: 12),

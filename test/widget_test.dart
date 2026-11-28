@@ -1,5 +1,6 @@
 import 'package:autoline_tycoon/game/entities.dart';
 import 'package:autoline_tycoon/game/game_engine.dart';
+import 'package:autoline_tycoon/games/chess/chess_engine.dart';
 import 'package:autoline_tycoon/games/neon_dash/dash_engine.dart';
 import 'package:autoline_tycoon/main.dart';
 import 'package:autoline_tycoon/services/remote_games_service.dart';
@@ -108,6 +109,27 @@ void main() {
     expect(parsed.first.title, 'NEON STACK');
   });
 
+
+  test('ChessEngine generates legal moves, supports undo, and computes AI move', () {
+    final chess = ChessEngine();
+    final whiteMoves = chess.getAllLegal('w');
+    expect(whiteMoves.length, equals(20));
+
+    final e2e4 = whiteMoves.firstWhere((m) => m.fr == 6 && m.fc == 4 && m.tr == 4 && m.tc == 4);
+    chess.commitMove(e2e4);
+    expect(chess.turn, equals('b'));
+    expect(chess.board[4][4], equals('wP'));
+
+    final aiMove = chess.computeBestAiMove(ChessMode.easy);
+    expect(aiMove, isNotNull);
+    chess.commitMove(aiMove!);
+    expect(chess.turn, equals('w'));
+
+    expect(chess.undo(steps: 2), isTrue);
+    expect(chess.board[6][4], equals('wP'));
+    expect(chess.board[4][4], isNull);
+  });
+
   testWidgets('NufatGamesApp renders modern clean Hub and launches Neon Striker',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -117,6 +139,7 @@ void main() {
     expect(find.text('Nufat Games Populer'), findsOneWidget);
     expect(find.text('NEON STRIKER'), findsWidgets);
     expect(find.text('NEON DASH'), findsWidgets);
+    expect(find.text('CATUR ORI'), findsWidgets);
     expect(find.text('NEON STACK'), findsWidgets);
 
     await tester.tap(find.text('NEON STRIKER').first);
