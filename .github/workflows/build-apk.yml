@@ -68,6 +68,8 @@ jobs:
           mpath = "android/app/src/main/AndroidManifest.xml"
           m = open(mpath, "r", encoding="utf-8").read()
           m = re.sub(r'android:label="[^"]*"', 'android:label="Nufat Games"', m)
+          if 'android.permission.INTERNET' not in m:
+              m = m.replace('<application', '<uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
           open(mpath, "w", encoding="utf-8").write(m)
           PYEOF
 

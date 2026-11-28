@@ -1,5 +1,5 @@
 name: autoline_tycoon
-description: AutoLine Tycoon - Industrial Production Line Idle Simulation Game for Android.
+description: Nufat Games - Hybrid Native 60FPS & Cloud WebView Arcade Hub for Android.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.3.2
   audioplayers: ^6.1.0
+  http: ^1.2.2
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:

@@ -2,6 +2,7 @@ import 'package:autoline_tycoon/game/entities.dart';
 import 'package:autoline_tycoon/game/game_engine.dart';
 import 'package:autoline_tycoon/games/neon_dash/dash_engine.dart';
 import 'package:autoline_tycoon/main.dart';
+import 'package:autoline_tycoon/services/remote_games_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,7 +91,24 @@ void main() {
     dash.dispose();
   });
 
-  testWidgets('NufatGamesApp renders Hub and launches Neon Striker & Neon Dash',
+  test('RemoteGamesService parses API catalog and filters active HTTPS games', () {
+    const raw = '''
+    {
+      "version": 1,
+      "games": [
+        {"id": "neon-stack", "title": "NEON STACK", "url": "https://nufat.id/games/neon-stack/", "active": true},
+        {"id": "off-game", "title": "OFF", "url": "https://nufat.id/games/off/", "active": false},
+        {"id": "bad-http", "title": "BAD", "url": "http://insecure.local/game", "active": true}
+      ]
+    }
+    ''';
+    final parsed = RemoteGamesService.parseCatalog(raw);
+    expect(parsed.length, 1);
+    expect(parsed.first.id, 'neon-stack');
+    expect(parsed.first.title, 'NEON STACK');
+  });
+
+  testWidgets('NufatGamesApp renders Hybrid Hub (Native + WebView) and launches Neon Striker',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const NufatGamesApp());
@@ -99,8 +117,8 @@ void main() {
     expect(find.text('NUFAT GAMES'), findsOneWidget);
     expect(find.text('NEON STRIKER'), findsOneWidget);
     expect(find.text('NEON DASH'), findsOneWidget);
+    expect(find.text('NEON STACK'), findsOneWidget);
 
-    // Launch Neon Striker -> Hangar
     await tester.tap(find.text('NEON STRIKER'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
