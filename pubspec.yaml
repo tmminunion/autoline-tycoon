@@ -32,3 +32,4 @@ flutter:
   assets:
     - assets/icon/
     - assets/sfx/
+    - assets/games/
