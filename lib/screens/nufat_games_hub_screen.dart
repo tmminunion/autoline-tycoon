@@ -5,6 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../games/chess/chess_screen.dart';
 import '../games/congklak/congklak_screen.dart';
+import '../games/dam/dam_screen.dart';
+import '../games/fruit_merge/fruit_merge_screen.dart';
+import '../games/karambol/karambol_screen.dart';
+import '../games/ludo/ludo_screen.dart';
+import '../games/ular_tangga/ular_tangga_screen.dart';
+import '../games/water_sort/water_sort_screen.dart';
 import '../games/gaple/gaple_screen.dart';
 import '../games/neon_block/block_screen.dart';
 import '../games/neon_dash/dash_screen.dart';
@@ -70,6 +76,12 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
   int _blockBest = 0;
   int _gapleBest = 0;
   int _congklakBest = 0;
+  int _ludoBest = 0;
+  int _ularBest = 0;
+  int _damBest = 0;
+  int _waterBest = 1;
+  int _fruitBest = 0;
+  int _karambolBest = 0;
   List<RemoteWebGame> _remoteGames = RemoteGamesService.fallbackGames;
   Map<String, int> _webBests = const {};
   bool _remoteFromServer = false;
@@ -104,6 +116,12 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         _blockBest = prefs.getInt('nufat_block_best_v1') ?? 0;
         _gapleBest = prefs.getInt('nufat_gaple_best_v1') ?? 0;
         _congklakBest = prefs.getInt('nufat_congklak_best_v1') ?? 0;
+        _ludoBest = prefs.getInt('nufat_ludo_best_v1') ?? 0;
+        _ularBest = prefs.getInt('nufat_ulartangga_best_v1') ?? 0;
+        _damBest = prefs.getInt('nufat_dam_best_v1') ?? 0;
+        _waterBest = prefs.getInt('nufat_watersort_best_v1') ?? 1;
+        _fruitBest = prefs.getInt('nufat_fruitmerge_best_v1') ?? 0;
+        _karambolBest = prefs.getInt('nufat_karambol_best_v1') ?? 0;
         _webBests = webBests;
       });
     } catch (_) {}
@@ -209,6 +227,72 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         icon: Icons.grain_rounded,
         bestScore: _congklakBest,
         onTap: () => _openGame(const CongklakScreen()),
+      ),
+      _HubGameItem(
+        id: 'ludo-ori',
+        title: 'LUDO ORI',
+        subtitle: _ludoBest > 0 ? 'Menang $_ludoBest' : 'Ludo 4 Warna AI',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFFEF4444), Color(0xFF1D4ED8)],
+        icon: Icons.casino_rounded,
+        bestScore: _ludoBest,
+        onTap: () => _openGame(const LudoScreen()),
+      ),
+      _HubGameItem(
+        id: 'ular-tangga-ori',
+        title: 'ULAR TANGGA',
+        subtitle: _ularBest > 0 ? 'Menang $_ularBest' : 'Papan 1-100 Klasik',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFF22C55E), Color(0xFF0EA5E9)],
+        icon: Icons.stairs_rounded,
+        bestScore: _ularBest,
+        onTap: () => _openGame(const UlarTanggaScreen()),
+      ),
+      _HubGameItem(
+        id: 'dam-ori',
+        title: 'DAM-DAMAN ORI',
+        subtitle: _damBest > 0 ? 'Menang $_damBest' : 'Checkers AI / 2P',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFFDC2626), Color(0xFF78350F)],
+        icon: Icons.workspace_premium_rounded,
+        bestScore: _damBest,
+        onTap: () => _openGame(const DamScreen()),
+      ),
+      _HubGameItem(
+        id: 'water-sort-neon',
+        title: 'WATER SORT',
+        subtitle: _waterBest > 1 ? 'Level $_waterBest' : 'Puzzle Tabung Neon',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFF00F5FF), Color(0xFF9333EA)],
+        icon: Icons.science_rounded,
+        bestScore: _waterBest,
+        onTap: () => _openGame(const WaterSortScreen()),
+      ),
+      _HubGameItem(
+        id: 'fruit-merge-neon',
+        title: 'FRUIT MERGE',
+        subtitle: _fruitBest > 0 ? 'Best $_fruitBest' : 'Fisika Gabung Buah',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFF22C55E), Color(0xFFF97316)],
+        icon: Icons.bubble_chart_rounded,
+        bestScore: _fruitBest,
+        onTap: () => _openGame(const FruitMergeScreen()),
+      ),
+      _HubGameItem(
+        id: 'karambol-ori',
+        title: 'KARAMBOL ORI',
+        subtitle: _karambolBest > 0 ? 'Best $_karambolBest' : 'Sentil Karambol 2D',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFFD9A441), Color(0xFF7C2D12)],
+        icon: Icons.adjust_rounded,
+        bestScore: _karambolBest,
+        onTap: () => _openGame(const KarambolScreen()),
       ),
     ];
 

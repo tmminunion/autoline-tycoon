@@ -22,6 +22,24 @@ class GameTileArtwork extends StatelessWidget {
     final keyId = id.toLowerCase();
     final cat = category.toLowerCase();
 
+    if (keyId.contains('ludo')) {
+      return 'assets/games/ludo_ori.webp';
+    }
+    if (keyId.contains('ular-tangga') || keyId.contains('tangga')) {
+      return 'assets/games/ular_tangga.webp';
+    }
+    if (keyId.contains('dam-ori') || keyId.contains('checkers')) {
+      return 'assets/games/dam_ori.webp';
+    }
+    if (keyId.contains('water-sort') || keyId.contains('watersort')) {
+      return 'assets/games/water_sort.webp';
+    }
+    if (keyId.contains('fruit-merge') || keyId.contains('suika')) {
+      return 'assets/games/fruit_merge.webp';
+    }
+    if (keyId.contains('karambol') || keyId.contains('carrom')) {
+      return 'assets/games/karambol_ori.webp';
+    }
     if (keyId.contains('congklak') || keyId.contains('mancala') || keyId.contains('dakon')) {
       return 'assets/games/congklak_ori.webp';
     }
