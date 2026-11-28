@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'chess_engine.dart';
+import 'chess_piece_widget.dart';
 
 class ChessScreen extends StatefulWidget {
   const ChessScreen({super.key});
@@ -17,8 +18,8 @@ class _ChessScreenState extends State<ChessScreen> {
   static const Color _bg = Color(0xFF140F08);
   static const Color _gold = Color(0xFFC9993A);
   static const Color _goldLight = Color(0xFFE8C46A);
-  static const Color _sqLight = Color(0xFFF0D9B5);
-  static const Color _sqDark = Color(0xFFB58863);
+  static const Color _sqLight = Color(0xFFEFE2C8);
+  static const Color _sqDark = Color(0xFF9C704C);
 
   final ChessEngine _engine = ChessEngine();
   ChessMode _mode = ChessMode.easy;
@@ -225,10 +226,7 @@ class _ChessScreenState extends State<ChessScreen> {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: _gold.withValues(alpha: 0.6)),
                   ),
-                  child: Text(
-                    ChessEngine.pieceSymbols['$color$t'] ?? t,
-                    style: const TextStyle(fontSize: 30, color: Colors.white),
-                  ),
+                  child: ChessPieceWidget(code: '$color$t', size: 36),
                 ),
               ),
           ],
@@ -439,7 +437,8 @@ class _ChessScreenState extends State<ChessScreen> {
                       // Top Player + Captured
                       _PlayerRow(
                         label: topLabel,
-                        captured: _engine.capturedB.map((p) => ChessEngine.pieceSymbols['b$p'] ?? '').join(' '),
+                        isWhiteSide: false,
+                        capturedCodes: _engine.capturedB.map((p) => 'b$p').toList(),
                       ),
 
                       // Board
@@ -478,7 +477,6 @@ class _ChessScreenState extends State<ChessScreen> {
                                       ((last.fr == r && last.fc == c) || (last.tr == r && last.tc == c));
                                   final isHint = _hints.any((h) => h.tr == r && h.tc == c);
                                   final piece = _engine.board[r][c];
-                                  final isWhitePiece = piece != null && piece[0] == 'w';
 
                                   Color bgColor = isLight ? _sqLight : _sqDark;
                                   if (isLast) bgColor = Color.lerp(bgColor, const Color(0xFFCDD91A), 0.55)!;
@@ -509,24 +507,9 @@ class _ChessScreenState extends State<ChessScreen> {
                                               ),
                                             ),
                                           if (piece != null)
-                                            FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: Text(
-                                                ChessEngine.pieceSymbols[piece] ?? '',
-                                                style: TextStyle(
-                                                  fontSize: 30,
-                                                  height: 1,
-                                                  color: isWhitePiece ? Colors.white : const Color(0xFF141414),
-                                                  shadows: isWhitePiece
-                                                      ? const [
-                                                          Shadow(color: Color(0xDD000000), blurRadius: 3, offset: Offset(0, 1)),
-                                                          Shadow(color: Color(0xAA000000), blurRadius: 1, offset: Offset(0.6, 0.6)),
-                                                        ]
-                                                      : const [
-                                                          Shadow(color: Color(0x44FFFFFF), blurRadius: 2),
-                                                        ],
-                                                ),
-                                              ),
+                                            Padding(
+                                              padding: const EdgeInsets.all(2.5),
+                                              child: ChessPieceWidget(code: piece, size: 36),
                                             ),
                                         ],
                                       ),
@@ -542,7 +525,8 @@ class _ChessScreenState extends State<ChessScreen> {
                       // Bottom Player + Captured
                       _PlayerRow(
                         label: botLabel,
-                        captured: _engine.capturedW.map((p) => ChessEngine.pieceSymbols['w$p'] ?? '').join(' '),
+                        isWhiteSide: true,
+                        capturedCodes: _engine.capturedW.map((p) => 'w$p').toList(),
                       ),
                       const SizedBox(height: 8),
 
@@ -625,10 +609,15 @@ class _ModeTab extends StatelessWidget {
 }
 
 class _PlayerRow extends StatelessWidget {
-  const _PlayerRow({required this.label, required this.captured});
+  const _PlayerRow({
+    required this.label,
+    required this.isWhiteSide,
+    required this.capturedCodes,
+  });
 
   final String label;
-  final String captured;
+  final bool isWhiteSide;
+  final List<String> capturedCodes;
 
   @override
   Widget build(BuildContext context) {
@@ -636,18 +625,34 @@ class _PlayerRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
       child: Row(
         children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: isWhiteSide ? Colors.white : const Color(0xFF18181B),
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(
+                color: isWhiteSide ? const Color(0xFF333333) : const Color(0xFF9CA3AF),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           Text(
             label,
             style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: Color(0xFFE8C46A)),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              captured,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 14, color: Color(0xFFF5EDD6)),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  for (final code in capturedCodes)
+                    ChessPieceWidget(code: code, size: 17),
+                ],
+              ),
             ),
           ),
         ],
