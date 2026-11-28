@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../games/chess/chess_screen.dart';
+import '../games/gaple/gaple_screen.dart';
 import '../games/neon_block/block_screen.dart';
 import '../games/neon_dash/dash_screen.dart';
 import '../services/remote_games_service.dart';
@@ -66,6 +67,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
   int _dashBest = 0;
   int _chessBest = 0;
   int _blockBest = 0;
+  int _gapleBest = 0;
   List<RemoteWebGame> _remoteGames = RemoteGamesService.fallbackGames;
   Map<String, int> _webBests = const {};
   bool _remoteFromServer = false;
@@ -98,6 +100,7 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         _dashBest = prefs.getInt('nufat_dash_best_v1') ?? 0;
         _chessBest = prefs.getInt('nufat_chess_best_v1') ?? 0;
         _blockBest = prefs.getInt('nufat_block_best_v1') ?? 0;
+        _gapleBest = prefs.getInt('nufat_gaple_best_v1') ?? 0;
         _webBests = webBests;
       });
     } catch (_) {}
@@ -181,6 +184,17 @@ class _NufatGamesHubScreenState extends State<NufatGamesHubScreen> {
         icon: Icons.grid_view_rounded,
         bestScore: _blockBest,
         onTap: () => _openGame(const NeonBlockScreen()),
+      ),
+      _HubGameItem(
+        id: 'gaple-ori',
+        title: 'GAPLE ORI',
+        subtitle: _gapleBest > 0 ? 'Best $_gapleBest' : 'Domino 4 Pemain',
+        isNative: true,
+        category: 'Native',
+        colors: const [Color(0xFF10B981), Color(0xFF065F46)],
+        icon: Icons.casino_rounded,
+        bestScore: _gapleBest,
+        onTap: () => _openGame(const GapleScreen()),
       ),
     ];
 
