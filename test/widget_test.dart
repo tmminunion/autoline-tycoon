@@ -102,7 +102,8 @@ void main() {
 
     // Launch Neon Striker -> Hangar
     await tester.tap(find.text('NEON STRIKER'));
-    await tester.pumpAndSettle(const Duration(milliseconds: 250));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('NEON'), findsOneWidget);
     expect(find.text('STRIKER'), findsOneWidget);
