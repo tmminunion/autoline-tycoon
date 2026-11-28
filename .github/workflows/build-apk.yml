@@ -1,4 +1,4 @@
-name: Build Neon Striker Android APK
+name: Build Nufat Games Android APK
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build-apk:
-    name: Analyze, Test & Build Neon Striker Release APK
+    name: Analyze, Test & Build Nufat Games Release APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -67,7 +67,7 @@ jobs:
 
           mpath = "android/app/src/main/AndroidManifest.xml"
           m = open(mpath, "r", encoding="utf-8").read()
-          m = re.sub(r'android:label="[^"]*"', 'android:label="Neon Striker"', m)
+          m = re.sub(r'android:label="[^"]*"', 'android:label="Nufat Games"', m)
           open(mpath, "w", encoding="utf-8").write(m)
           PYEOF
 
@@ -97,17 +97,17 @@ jobs:
             sleep 10
           done
           cp build/app/outputs/flutter-apk/app-release.apk \
-            "Neon-Striker-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk"
+            "Nufat-Games-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}
-          name: Neon Striker v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }})
+          name: Nufat Games v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }})
           body: |
-            Build otomatis Android Release APK untuk **Neon Striker — Cyberpunk Arcade Shooter** (`v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}`).
+            Build otomatis Android Release APK untuk **Nufat Games (Neon Striker + Neon Dash)** (`v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}`).
             Unduh file `.apk` di bawah untuk langsung install di perangkat Android.
-          files: Neon-Striker-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk
+          files: Nufat-Games-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk
           make_latest: true
 
       - name: Send APK Link to Telegram
@@ -115,7 +115,7 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          APK_FILE: "Neon-Striker-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk"
+          APK_FILE: "Nufat-Games-v${{ steps.meta.outputs.version_name }}-code${{ steps.meta.outputs.version_code }}-release.apk"
           RELEASE_URL: "https://github.com/${{ github.repository }}/releases/tag/v${{ steps.meta.outputs.version_name }}+${{ steps.meta.outputs.version_code }}"
         run: |
           if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
@@ -125,9 +125,9 @@ jobs:
 
           if [ -f "$APK_FILE" ]; then
             APK_MB=$(awk "BEGIN {printf \"%.2f\", $(wc -c < "$APK_FILE")/1048576}")
-            MSG=$(printf "🚀 Neon Striker Arcade v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) berhasil dibuild!\n📱 APK: %s (%s MB)\n📥 Release: %s" "${APK_FILE}" "${APK_MB}" "${RELEASE_URL}")
+            MSG=$(printf "🚀 Nufat Games v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) berhasil dibuild!\n📱 APK: %s (%s MB)\n📥 Release: %s" "${APK_FILE}" "${APK_MB}" "${RELEASE_URL}")
           else
-            MSG="❌ Build Neon Striker Arcade v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) gagal menghasilkan file APK."
+            MSG="❌ Build Nufat Games v${{ steps.meta.outputs.version_name }} (Build ${{ steps.meta.outputs.version_code }}) gagal menghasilkan file APK."
           fi
 
           curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \

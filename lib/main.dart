@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'screens/arcade_screen.dart';
+import 'screens/nufat_games_hub_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -9,16 +9,16 @@ void main() {
     DeviceOrientation.portraitUp,
   ]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  runApp(const NeonStrikerApp());
+  runApp(const NufatGamesApp());
 }
 
-class NeonStrikerApp extends StatelessWidget {
-  const NeonStrikerApp({super.key});
+class NufatGamesApp extends StatelessWidget {
+  const NufatGamesApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Neon Striker',
+      title: 'Nufat Games',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -29,7 +29,7 @@ class NeonStrikerApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: const ArcadeScreen(),
+      home: const NufatGamesHubScreen(),
     );
   }
 }

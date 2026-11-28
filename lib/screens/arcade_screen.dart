@@ -96,6 +96,42 @@ class _ArcadeScreenState extends State<ArcadeScreen>
                         _buildPauseOverlay(),
                       if (_engine.phase == GamePhase.gameOver)
                         _buildGameOverOverlay(),
+                      if (Navigator.of(context).canPop() &&
+                          (_engine.phase == GamePhase.title ||
+                              _engine.phase == GamePhase.paused ||
+                              _engine.phase == GamePhase.gameOver))
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          child: SafeArea(
+                            child: Material(
+                              color: const Color(0xCC071024),
+                              borderRadius: BorderRadius.circular(999),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(999),
+                                onTap: () => Navigator.of(context).maybePop(),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(color: const Color(0x6600E5FF)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.arrow_back_rounded, size: 15, color: Color(0xFF00E5FF)),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        'HUB',
+                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   );
                 },
